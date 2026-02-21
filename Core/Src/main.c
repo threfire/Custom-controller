@@ -31,6 +31,7 @@
 #include "string.h"
 #include "ws2812.h"
 #include "servo_mapping.h"
+#include "ZDT_X42_V2.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

@@ -27,11 +27,21 @@ Project File Date:  01/16/2026
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 5 (build 528)', folder: 'D:\Keil5\ARM\ARMCC\Bin'
 Build target 'CtrlBoard-H7_WS1812'
+compiling main.c...
+compiling servo_mapping.c...
+..\User\APP\servo_mapping.c(249): warning:  #186-D: pointless comparison of unsigned integer with zero
+          if (Servos[i].angle < 
+NGLE_MIN || Servos[i].angle  > ANGLE_MAX) 
+..\User\APP\servo_mapping.c(421): warning:  #1-D: last line of file ends without a newline
+  }
+..\User\APP\servo_mapping.c(10): warning:  #177-D: variable "pos_txbuf"  was declared but never referenced
+  static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum
+..\User\APP\servo_mapping.c: 3 warnings, 0 errors
 compiling freertos.c...
 linking...
-Program Size: Code=30148 RO-data=1792 RW-data=200 ZI-data=20408  
+Program Size: Code=28960 RO-data=1024 RW-data=188 ZI-data=20476  
 FromELF: creating hex file...
-"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 0 Warning(s).
+"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 3 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -54,7 +64,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE@6.1.0
       Include file:  CMSIS/Core/Include/tz_context.h
-Build Time Elapsed:  00:00:05
+Build Time Elapsed:  00:00:09
 </pre>
 </body>
 </html>

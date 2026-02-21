@@ -58,3 +58,7 @@ ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/
 ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/event_groups.h
+ctrlboard-h7_ws1812\servo_mapping.o: ../User/Devices/ZDT/ZDT_X42_V2.h
+ctrlboard-h7_ws1812\servo_mapping.o: ../User/BSP/bsp_fdcan.h
+ctrlboard-h7_ws1812\servo_mapping.o: ../Core/Inc/fdcan.h
+ctrlboard-h7_ws1812\servo_mapping.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

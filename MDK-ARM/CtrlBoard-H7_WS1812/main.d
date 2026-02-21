@@ -63,3 +63,6 @@ ctrlboard-h7_ws1812\main.o: ../Core/Inc/gpio.h
 ctrlboard-h7_ws1812\main.o: D:\Keil5\ARM\ARMCC\Bin\..\include\string.h
 ctrlboard-h7_ws1812\main.o: ../User/Devices/WS2812/ws2812.h
 ctrlboard-h7_ws1812\main.o: ../User/APP/servo_mapping.h
+ctrlboard-h7_ws1812\main.o: ../User/Devices/ZDT/ZDT_X42_V2.h
+ctrlboard-h7_ws1812\main.o: ../User/BSP/bsp_fdcan.h
+ctrlboard-h7_ws1812\main.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

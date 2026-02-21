@@ -3,6 +3,11 @@
 
 #include "main.h"
 
+#define servo_controller 0
+#define zdt_controller 1
+/* =================两个自控选择 ================= */
+#define controller_mode zdt_controller
+
 #define TASKNUM 3
 #define NORMALTASK 0
 #define GETTASK 1
@@ -16,6 +21,7 @@
 #define SERVO_LOAD_OR_UNLOAD_WRITE 0X1F	//31参数 1 ：舵机内部电机是否卸载掉电，范围0 或 1 ，0 代表卸载掉电，此时舵机 无力矩输出。1 代表装载电机，此时舵机有力矩输出，默认值 0。
 
 #define SERVOS_NUM 0X06
+#define MOTORS_NUM 6
 #define JUDGE_MAX_TX_LENGTH 40
 #define PI 3.1415926f
 /*
@@ -56,6 +62,18 @@
 #define ACTUATOR_KEY 0X02
 
 uint8_t handleButtonPress(uint8_t KEY);
+
+/* 电机电流信息结构体 */
+typedef struct {
+    uint8_t id;                 // 电机ID (1~6)
+    int16_t target_current;     // 目标电流值 (单位可根据实际定，如mA)
+    int16_t actual_current;     // 实际电流值 (单位同目标电流)
+    uint16_t voltage;           // 电压值 (单位mV)
+    int8_t temperature;         // 温度值 (单位摄氏度，允许负值)
+    uint8_t error_code;         // 错误码 (0表示无错误)
+    uint8_t enabled;            // 使能状态 (0:未使能, 1:使能)
+    // 可根据需要增加其他字段，如功率、位置等
+} MotorCurrentInfo;
 
 typedef struct 
 {
@@ -128,6 +146,8 @@ extern Servo            				Servos[SERVOS_NUM];
 extern servoMapping     				ServoMap;
 extern moterMapHeader          	    	MoterMap;
 extern FrequencyCheck		   			taskFrequencyCheck;
+/* 声明全局电机电流数组 */
+extern MotorCurrentInfo MotorCurrents[MOTORS_NUM];
 
 void TaskFrequencyCheck(uint8_t tasknum);
 void TaskFrequencycount(uint8_t tasknum);
@@ -141,4 +161,5 @@ void buzzer_off(void);
 void Servo_Task(void);
 void Robot_Task(void);
 void Get_Keynum(void);
+void motor_mapping_init(void);
 #endif

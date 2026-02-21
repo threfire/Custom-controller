@@ -90,6 +90,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 	Servo_Mapping_Init();
 	bsp_can_init();
+	motor_mapping_init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */

@@ -1,6 +1,7 @@
 #include "servo_mapping.h"
 #include "crc.h"
 #include "cmsis_os.h"
+#include "ZDT_X42_V2.h"
 
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 
@@ -12,13 +13,16 @@ servoMapping ServoMap;
 Servo Servos[SERVOS_NUM];
 moterMapHeader   MoterMap;
 
+
 Servo                   LastServos[SERVOS_NUM];
 customController_t      CustomController;
 JudgeTxFrame            txFrame;
 FrequencyCheck		   taskFrequencyCheck;
 
-void JustFloat_send(moterMapHeader *MoterMap);
+MotorCurrentInfo MotorCurrents[SERVOS_NUM];
 
+void JustFloat_send(moterMapHeader *MoterMap);
+void testtask(void);
 uint16_t lowV(Servo* servo, uint16_t currentAngle) {
     float dPower = 1.0f;
     uint16_t filtered = (uint16_t)(currentAngle * dPower + (1 - dPower) * servo->lastFilteredAngle);
@@ -41,7 +45,10 @@ void TaskFrequencycount(uint8_t tasknum)
 	taskFrequencyCheck.Frequency[tasknum] ++;
 }
 
-void Servo_Task(void){
+#if controller_mode == servo_controller
+
+void Servo_Task(void)
+{
     FillServoPacket_POS(ServoMap.ZX_Data.transmitIndex, pos_txbuf);//填充发送帧:pos
     HAL_UART_Transmit_DMA(&huart7, pos_txbuf, 6);//发送
     
@@ -53,15 +60,60 @@ void Servo_Task(void){
 	
 	
 }
-void Robot_Task(void){
+void Robot_Task(void)
+{
 
-//    if (ServoMap.ZX_Data.dataEnable == 0x01) {
+		//if (ServoMap.ZX_Data.dataEnable == 0x01) {
         CustomController_StructSend(&MoterMap);
-//    }
-//	JustFloat_send(&MoterMap);
+		//}
+		//JustFloat_send(&MoterMap);
+	
+}
+#endif
+
+#if controller_mode == zdt_controller
+
+void Servo_Task(void)
+{
 	
 }
 
+void Robot_Task(void)
+{
+	
+}
+void motor_mapping_init(void)
+{
+	for (uint8_t i = 0; i < SERVOS_NUM; i++)
+    {
+        MotorCurrents[i].id = i + 1;               // ID从1开始
+        MotorCurrents[i].target_current = 0;
+        MotorCurrents[i].actual_current = 0;
+        MotorCurrents[i].voltage = 0;
+        MotorCurrents[i].temperature = 0;
+        MotorCurrents[i].error_code = 0;
+        MotorCurrents[i].enabled = 0;
+    }
+}
+void Read_zdt_Pos(void)
+{
+	ZDT_X42_V2_Read_Sys_Params(1 ,S_CPOS);
+	ZDT_X42_V2_Read_Sys_Params(3 ,S_CPOS);
+	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
+	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
+	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
+}
+void Set_Taget_Torque(void)
+{
+	
+	
+	ZDT_X42_V2_Torque_Control(1, 0, 1000,1000,0);
+	ZDT_X42_V2_Torque_Control(3, 0, 1000,1000,0);
+	ZDT_X42_V2_Torque_Control(4, 0, 1000,1000,0);
+	ZDT_X42_V2_Torque_Control(5, 0, 1000,1000,0);
+	ZDT_X42_V2_Torque_Control(6, 0, 1000,1000,0);
+}
+#endif
 
 /**
   * @brief  填充位置查询数据包
