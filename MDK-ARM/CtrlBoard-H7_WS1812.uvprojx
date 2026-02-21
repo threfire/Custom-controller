@@ -1554,6 +1554,11 @@
               <FileType>5</FileType>
               <FilePath>..\User\APP\userkey.h</FilePath>
             </File>
+            <File>
+              <FileName>Gravity_comp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\APP\Gravity_comp.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

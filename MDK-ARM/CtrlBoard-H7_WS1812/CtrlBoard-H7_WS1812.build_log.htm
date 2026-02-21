@@ -22,26 +22,21 @@ Dialog DLL:      TCM.DLL V1.56.4.0
  
 <h2>Project:</h2>
 C:\Users\huang\Desktop\RM\工程\自定义控制器\代码\Custom_Controller - v1.2\MDK-ARM\CtrlBoard-H7_WS1812.uvprojx
-Project File Date:  01/16/2026
+Project File Date:  02/22/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 5 (build 528)', folder: 'D:\Keil5\ARM\ARMCC\Bin'
 Build target 'CtrlBoard-H7_WS1812'
-compiling freertos.c...
-compiling main.c...
-compiling servo_mapping.c...
-..\User\APP\servo_mapping.c(260): warning:  #186-D: pointless comparison of unsigned integer with zero
-          if (Servos[i].angle < 
-NGLE_MIN || Servos[i].angle  > ANGLE_MAX) 
-..\User\APP\servo_mapping.c(432): warning:  #1-D: last line of file ends without a newline
-  }
-..\User\APP\servo_mapping.c(10): warning:  #177-D: variable "pos_txbuf"  was declared but never referenced
-  static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum
-..\User\APP\servo_mapping.c: 3 warnings, 0 errors
+compiling Gravity_comp.c...
+..\User\APP\Gravity_comp.h(7): warning:  #1-D: last line of file ends without a newline
+  #endif
+..\User\APP\Gravity_comp.c(71): warning:  #177-D: function "vec_add"  was declared but never referenced
+  static void vec_add(const float a[3], const float b[3], float c[3]) {
+..\User\APP\Gravity_comp.c: 2 warnings, 0 errors
 linking...
 Program Size: Code=29008 RO-data=1024 RW-data=188 ZI-data=20476  
 FromELF: creating hex file...
-"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 3 Warning(s).
+"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 2 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -64,7 +59,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE@6.1.0
       Include file:  CMSIS/Core/Include/tz_context.h
-Build Time Elapsed:  00:00:11
+Build Time Elapsed:  00:00:02
 </pre>
 </body>
 </html>

@@ -50,6 +50,7 @@
 "ctrlboard-h7_ws1812\servo_mapping.o"
 "ctrlboard-h7_ws1812\usart_manager.o"
 "ctrlboard-h7_ws1812\userkey.o"
+"ctrlboard-h7_ws1812\gravity_comp.o"
 "ctrlboard-h7_ws1812\bsp_fdcan.o"
 "ctrlboard-h7_ws1812\ws2812.o"
 "ctrlboard-h7_ws1812\zdt_x42_v2.o"
