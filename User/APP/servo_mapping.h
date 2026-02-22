@@ -165,5 +165,6 @@ void Get_Keynum(void);
 void motor_mapping_init(void);
 void Read_zdt_Pos(void);
 void Set_Taget_Torque(void);
+void Get_theta(MotorCurrentInfo *motor_currents);
 void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len);
 #endif

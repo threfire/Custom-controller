@@ -221,23 +221,13 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 //		fdcan3_rx_callback();
 //	}
 }
-/*总线关闭错误中断回调*/
-void HAL_FDCAN_BusOffCallback(FDCAN_HandleTypeDef *hfdcan)
-{
-    if (hfdcan == &hfdcan1)
-    {
-		can_error_status |= CAN_ERROR_BUS_OFF;
-        // 重新启动 CAN
-        HAL_FDCAN_Stop(hfdcan);
-        HAL_Delay(10);
-        HAL_FDCAN_Start(hfdcan);
-    }
-}
+
 void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
 {
     if (hfdcan == &hfdcan1) {
+		
         uint32_t hal_error = HAL_FDCAN_GetError(hfdcan);
-        
+		
         /* 清除旧状态（可根据需求选择清除全部或保留累积状态） */
         can_error_status = CAN_ERROR_NONE;
         

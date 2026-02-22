@@ -27,7 +27,9 @@ FrequencyCheck		   taskFrequencyCheck;
 MotorCurrentInfo MotorCurrents[SERVOS_NUM];
 
 void JustFloat_send(moterMapHeader *MoterMap);
-void testtask(void);
+
+	
+
 uint16_t lowV(Servo* servo, uint16_t currentAngle) {
     float dPower = 1.0f;
     uint16_t filtered = (uint16_t)(currentAngle * dPower + (1 - dPower) * servo->lastFilteredAngle);
@@ -108,11 +110,13 @@ void Read_zdt_Pos(void)
 	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
+	Get_theta(MotorCurrents);
+	/*计算重力补偿*/
+	gravity_compensation(theta, tau);
 }
 void Set_Taget_Torque(void)
 {
-	/*计算重力补偿*/
-	gravity_compensation(&theta[MOTORS_NUM], &tau[MOTORS_NUM]);
+
 	/*发送补偿力矩*/
 	ZDT_X42_V2_Torque_Control(3, 0, 1,10,0);
 	ZDT_X42_V2_Torque_Control(4, 0, 1,10,0);
@@ -171,14 +175,14 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
   * @param  
   * @retval None
   */
-void Get_theta(MotorCurrentInfo * MotorCurrents[MOTORS_NUM])
+void Get_theta(MotorCurrentInfo *motor_currents)
 {
-	theta[0] = PI/2;
-	theta[1] = -MotorCurrents[1]->position;
-	theta[2] = -PI/2 - MotorCurrents[2]->position;
-	theta[3] = - MotorCurrents[3]->position;
-	theta[4] = - MotorCurrents[4]->position;
-	theta[5] = - MotorCurrents[5]->position;
+    theta[0] = PI/2;
+    theta[1] = -motor_currents[1].position / 180.0f;   
+    theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
+    theta[3] = motor_currents[3].position*PI / 180.0f;
+    theta[4] = motor_currents[4].position*PI / 180.0f;
+    theta[5] = -motor_currents[5].position*PI / 180.0f;
 }
 /**
   * @brief  填充位置查询数据包

@@ -115,11 +115,11 @@ void MX_FREERTOS_Init(void) {
   LED_TaskHandle = osThreadCreate(osThread(LED_Task), NULL);
 
   /* definition and creation of SERVO_TASK */
-  osThreadDef(SERVO_TASK, Servo_TASK, osPriorityRealtime, 0, 128);
+  osThreadDef(SERVO_TASK, Servo_TASK, osPriorityHigh, 0, 1024);
   SERVO_TASKHandle = osThreadCreate(osThread(SERVO_TASK), NULL);
 
   /* definition and creation of ROBOT_TASK */
-  osThreadDef(ROBOT_TASK, Robot_TASK, osPriorityHigh, 0, 128);
+  osThreadDef(ROBOT_TASK, Robot_TASK, osPriorityHigh, 0, 1024);
   ROBOT_TASKHandle = osThreadCreate(osThread(ROBOT_TASK), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -167,9 +167,8 @@ void Servo_TASK(void const * argument)
 	  #endif
 	  #if controller_mode == zdt_controller
 	  Read_zdt_Pos();
-	  Set_Taget_Torque();
 	  #endif
-    osDelay(16);
+	osDelay(10);
 	
 
   }
@@ -194,7 +193,7 @@ void Robot_TASK(void const * argument)
 	  #endif
 	  
 	  #if controller_mode == zdt_controller
-	  
+	  Set_Taget_Torque();
 	  #endif
 	  TaskFrequencycount(SENDTASK);
     osDelay(1);
