@@ -1,7 +1,12 @@
 #include "bsp_fdcan.h"
 #include "string.h"
+#include "servo_mapping.h"
 
 __IO CAN_t can = {0};
+__IO CAN_ErrorStatus can_error_status = CAN_ERROR_NONE;
+
+uint8_t rx_data1[8] = {0};
+uint16_t rec_id1;
 
 /**
 ************************************************************************
@@ -15,7 +20,14 @@ void bsp_can_init(void)
 {
 	can_filter_init();
 	HAL_FDCAN_Start(&hfdcan1);                               //启动FDCAN
-	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&hfdcan1, 
+                               FDCAN_IT_RX_FIFO0_NEW_MESSAGE |
+                               FDCAN_IT_ERROR_WARNING |
+                               FDCAN_IT_ERROR_PASSIVE |
+                               FDCAN_IT_BUS_OFF |
+                               FDCAN_IT_ARB_PROTOCOL_ERROR |
+                               FDCAN_IT_DATA_PROTOCOL_ERROR,
+                               0);
 }
 
 /**
@@ -41,10 +53,12 @@ void can_filter_init(void)
 	
 	// 配置全局滤波器：拒绝所有不匹配的帧
 	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, 
-		FDCAN_REJECT, 
-		FDCAN_REJECT, 
-		FDCAN_REJECT_REMOTE, 
-		FDCAN_REJECT_REMOTE);
+//		FDCAN_REJECT, 
+//		FDCAN_REJECT, 
+		FDCAN_ACCEPT_IN_RX_FIFO0,  // 接收所有标准帧
+		FDCAN_ACCEPT_IN_RX_FIFO0,  // 接收所有扩展帧
+		FDCAN_FILTER_REMOTE, 
+		FDCAN_FILTER_REMOTE);
 		
 	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO0, 1);
 }
@@ -113,49 +127,7 @@ uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 	}
 	return 0;	
 }
-//void ZDT_Compatible_Receive_Data(uint8_t *rxCmd, uint8_t *rxCount)
-//{
-//	FDCAN_RxHeaderTypeDef pRxHeader;
-//	uint8_t buf[8] = {0};
-//	
-//	if(HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &pRxHeader, buf) == HAL_OK)
-//	{
-//		// 设置接收帧标志
-//		can.rxFrameFlag = true;
-//		
-//		// 填充CAN_RxMsg结构体以兼容ZDT协议
-//		can.CAN_RxMsg.ExtId = pRxHeader.Identifier;
-//		can.CAN_RxMsg.DLC = pRxHeader.DataLength >> 16;
-//		if(can.CAN_RxMsg.DLC > 8) {
-//			can.CAN_RxMsg.DLC = 8;
-//		}
-//		memcpy(can.CAN_RxMsg.Data, buf, can.CAN_RxMsg.DLC);
-//		
-//		// 填充CAN_TxMsg的ExtId（ZDT协议需要）
-//		can.CAN_TxMsg.ExtId = (pRxHeader.Identifier & 0xFF00) << 8; // 地址放在高8位
-//		
-//		// 复制数据到输出缓冲区
-//		*rxCount = can.CAN_RxMsg.DLC;
-//		
-//		// 第一个字节是地址（从扩展ID的高8位获取）
-//		rxCmd[0] = (uint8_t)(pRxHeader.Identifier >> 8);
-//		
-//		// 后续字节是数据
-//		for(uint8_t i = 0; i < can.CAN_RxMsg.DLC && i < 7; i++) {
-//			rxCmd[i + 1] = can.CAN_RxMsg.Data[i];
-//		}
-//		
-//		// 如果数据长度小于8，调整rxCount
-//		if(can.CAN_RxMsg.DLC > 0) {
-//			*rxCount = can.CAN_RxMsg.DLC + 1; // 包括地址字节
-//		}
-//	}
-//	else
-//	{
-//		can.rxFrameFlag = false;
-//		*rxCount = 0;
-//	}
-//}
+
 /**
 ************************************************************************
 * @brief:      	can_SendCmd
@@ -214,7 +186,10 @@ void can_SendCmd(uint8_t *cmd, uint32_t len)
         pTxHeader.MessageMarker = 0;
 
         // 发送数据
-        HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &pTxHeader, send_buffer);
+        if(HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &pTxHeader, send_buffer) != HAL_OK)
+		{
+			can_error_status = CAN_ERROR_SEND;
+		}
         
         // 记录发送的包序号
         packNum++;
@@ -224,26 +199,12 @@ void can_SendCmd(uint8_t *cmd, uint32_t len)
     }
 }
 
-uint8_t rx_data1[8] = {0};
-uint16_t rec_id1;
 void fdcan1_rx_callback(void)
 {
-	fdcanx_receive(&hfdcan1, &rec_id1, rx_data1);
-
+	uint8_t len = fdcanx_receive(&hfdcan1, &rec_id1, rx_data1);  // 获取实际数据长度
+    process_zdt_can_frame(rec_id1, rx_data1, len);               // 解析 ZDT 数据帧
 }
 
-//uint8_t rx_data2[8] = {0};
-//uint16_t rec_id2;
-//void fdcan2_rx_callback(void)
-//{
-//	fdcanx_receive(&hfdcan2, &rec_id2, rx_data2);
-//}
-//uint8_t rx_data3[8] = {0};
-//uint16_t rec_id3;
-//void fdcan3_rx_callback(void)
-//{
-//	fdcanx_receive(&hfdcan3, &rec_id3, rx_data3);
-//}
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
@@ -259,4 +220,33 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 //	{
 //		fdcan3_rx_callback();
 //	}
+}
+/*总线关闭错误中断回调*/
+void HAL_FDCAN_BusOffCallback(FDCAN_HandleTypeDef *hfdcan)
+{
+    if (hfdcan == &hfdcan1)
+    {
+		can_error_status |= CAN_ERROR_BUS_OFF;
+        // 重新启动 CAN
+        HAL_FDCAN_Stop(hfdcan);
+        HAL_Delay(10);
+        HAL_FDCAN_Start(hfdcan);
+    }
+}
+void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
+{
+    if (hfdcan == &hfdcan1) {
+        uint32_t hal_error = HAL_FDCAN_GetError(hfdcan);
+        
+        /* 清除旧状态（可根据需求选择清除全部或保留累积状态） */
+        can_error_status = CAN_ERROR_NONE;
+        
+        /* 映射 HAL 错误到自定义状态 */
+        if (hal_error & FDCAN_IT_ERROR_WARNING)   can_error_status |= CAN_ERROR_WARNING;
+        if (hal_error & FDCAN_IT_ERROR_PASSIVE)   can_error_status |= CAN_ERROR_PASSIVE;
+        if (hal_error & FDCAN_IT_BUS_OFF)   can_error_status |= CAN_ERROR_BUS_OFF;
+        if (hal_error & FDCAN_IT_ARB_PROTOCOL_ERROR) can_error_status |= CAN_ERROR_PROTOCOL_ARB;
+        if (hal_error & FDCAN_IT_DATA_PROTOCOL_ERROR) can_error_status |= CAN_ERROR_PROTOCOL_DATA;
+       
+    }
 }

@@ -45,3 +45,4 @@ ctrlboard-h7_ws1812\bsp_fdcan.o: ../Core/Inc/main.h
 ctrlboard-h7_ws1812\bsp_fdcan.o: ../Core/Inc/fdcan.h
 ctrlboard-h7_ws1812\bsp_fdcan.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\bsp_fdcan.o: D:\Keil5\ARM\ARMCC\Bin\..\include\string.h
+ctrlboard-h7_ws1812\bsp_fdcan.o: ../User/APP/servo_mapping.h

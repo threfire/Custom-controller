@@ -66,13 +66,14 @@ uint8_t handleButtonPress(uint8_t KEY);
 /* 电机电流信息结构体 */
 typedef struct {
     uint8_t id;                 // 电机ID (1~6)
-    int16_t target_current;     // 目标电流值 (单位可根据实际定，如mA)
-    int16_t actual_current;     // 实际电流值 (单位同目标电流)
-    uint16_t voltage;           // 电压值 (单位mV)
-    int8_t temperature;         // 温度值 (单位摄氏度，允许负值)
-    uint8_t error_code;         // 错误码 (0表示无错误)
-    uint8_t enabled;            // 使能状态 (0:未使能, 1:使能)
-    // 可根据需要增加其他字段，如功率、位置等
+    int16_t target_current;     // 目标电流值
+    int16_t actual_current;     // 实际电流值
+    uint16_t voltage;           // 电压值 (mV)
+    int8_t temperature;         // 温度值 (℃)
+    uint8_t error_code;         // 错误码
+    uint8_t enabled;            // 使能状态
+    float position;             // 当前角度位置 (度)
+	uint8_t dir;
 } MotorCurrentInfo;
 
 typedef struct 
@@ -162,4 +163,7 @@ void Servo_Task(void);
 void Robot_Task(void);
 void Get_Keynum(void);
 void motor_mapping_init(void);
+void Read_zdt_Pos(void);
+void Set_Taget_Torque(void);
+void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len);
 #endif

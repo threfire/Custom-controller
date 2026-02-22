@@ -2,6 +2,7 @@
 #include "crc.h"
 #include "cmsis_os.h"
 #include "ZDT_X42_V2.h"
+#include "Gravity_comp.h"
 
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 
@@ -9,6 +10,10 @@ uint8_t transmitBuffer[9];
 uint8_t len;
 static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum
 static uint8_t load_txbuf[7];  // 55 55 id 03 28 checksum
+
+float theta[MOTORS_NUM];//rad,弧度制2π~-2π
+float tau[MOTORS_NUM];
+
 servoMapping ServoMap;
 Servo Servos[SERVOS_NUM];
 moterMapHeader   MoterMap;
@@ -93,11 +98,12 @@ void motor_mapping_init(void)
         MotorCurrents[i].temperature = 0;
         MotorCurrents[i].error_code = 0;
         MotorCurrents[i].enabled = 0;
+		MotorCurrents[i].position = 0.0f;
+		MotorCurrents[i].dir = 0;
     }
 }
 void Read_zdt_Pos(void)
 {
-	ZDT_X42_V2_Read_Sys_Params(1 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(3 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
@@ -105,16 +111,75 @@ void Read_zdt_Pos(void)
 }
 void Set_Taget_Torque(void)
 {
-	
-	
-	ZDT_X42_V2_Torque_Control(1, 0, 1000,1000,0);
-	ZDT_X42_V2_Torque_Control(3, 0, 1000,1000,0);
-	ZDT_X42_V2_Torque_Control(4, 0, 1000,1000,0);
-	ZDT_X42_V2_Torque_Control(5, 0, 1000,1000,0);
-	ZDT_X42_V2_Torque_Control(6, 0, 1000,1000,0);
+	/*计算重力补偿*/
+	gravity_compensation(&theta[MOTORS_NUM], &tau[MOTORS_NUM]);
+	/*发送补偿力矩*/
+	ZDT_X42_V2_Torque_Control(3, 0, 1,10,0);
+	ZDT_X42_V2_Torque_Control(4, 0, 1,10,0);
+	ZDT_X42_V2_Torque_Control(5, 0, 1,10,0);
+	ZDT_X42_V2_Torque_Control(6, 0, 1,10,0);
+//	for(uint8_t i;i<6;i ++)
+//	{
+//		ZDT_X42_V2_Torque_Control(i, MotorCurrents[i].dir, tau[i]/2,tau[i],0);
+//	}
 }
 #endif
+/**
+  * @brief  处理从 CAN 接收到的 ZDT 电机位置数据帧
+  * @param  can_id  电机 ID（从 CAN 扩展 ID 高 16 位提取）
+  * @param  data    指向 8 字节数据缓冲区的指针（已通过 CAN 接收）
+  * @param  len     实际接收到的数据长度（由 fdcanx_receive 返回）
+  * @retval None
+  */
+void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
+{
+    // 校验功能码 (0x36) 和帧尾 (0x6B)
+    if (len < 7 || data[0] != 0x36 || data[6] != 0x6B) {
+        return;  // 无效帧
+    }
 
+    uint8_t id = (uint8_t)can_id;  // 低 8 位即为电机 ID
+    if (id < 1 || id > MOTORS_NUM) {
+        return;
+    }
+
+    // 解析 4 字节位置值（大端序：高位在前）
+    int32_t raw_pos = ((int32_t)data[2] << 24) |
+                      ((int32_t)data[3] << 16) |
+                      ((int32_t)data[4] << 8)  |
+                      data[5];
+
+    // 符号位：data[1] 为 0x00 正，0x01 负
+    if (data[1] == 0x01) {
+        raw_pos = -raw_pos;
+    }
+
+    // 转换为浮点数（单位：度），原始值放大了 10 倍
+    float position = raw_pos / 10.0f;
+
+    // 存入对应电机的结构体（ID 从 1 开始，数组索引为 id-1）
+    MotorCurrents[id - 1].position = position;
+	if(position >= 0)
+		MotorCurrents[id - 1].dir = 0;
+	else
+		MotorCurrents[id - 1].dir = 1;
+}
+/**
+* @brief  从电机位置得到dh参数θ角
+* @param  MotorCurrents 电机参数结构体
+  * @param  
+  * @param  
+  * @retval None
+  */
+void Get_theta(MotorCurrentInfo * MotorCurrents[MOTORS_NUM])
+{
+	theta[0] = PI/2;
+	theta[1] = -MotorCurrents[1]->position;
+	theta[2] = -PI/2 - MotorCurrents[2]->position;
+	theta[3] = - MotorCurrents[3]->position;
+	theta[4] = - MotorCurrents[4]->position;
+	theta[5] = - MotorCurrents[5]->position;
+}
 /**
   * @brief  填充位置查询数据包
   * @param  id: 舵机ID

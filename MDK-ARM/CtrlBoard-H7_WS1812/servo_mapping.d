@@ -62,3 +62,4 @@ ctrlboard-h7_ws1812\servo_mapping.o: ../User/Devices/ZDT/ZDT_X42_V2.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../User/BSP/bsp_fdcan.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Core/Inc/fdcan.h
 ctrlboard-h7_ws1812\servo_mapping.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
+ctrlboard-h7_ws1812\servo_mapping.o: ..\User\APP\Gravity_comp.h

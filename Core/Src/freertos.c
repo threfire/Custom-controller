@@ -162,8 +162,14 @@ void Servo_TASK(void const * argument)
   /* Infinite loop */
   for(;;)
   {
+	  #if controller_mode == servo_controller
 	  Servo_Task();
-    osDelay(3);
+	  #endif
+	  #if controller_mode == zdt_controller
+	  Read_zdt_Pos();
+	  Set_Taget_Torque();
+	  #endif
+    osDelay(16);
 	
 
   }
@@ -183,7 +189,13 @@ void Robot_TASK(void const * argument)
   /* Infinite loop */
   for(;;)
   {
+	  #if controller_mode == servo_controller
 	  Robot_Task();
+	  #endif
+	  
+	  #if controller_mode == zdt_controller
+	  
+	  #endif
 	  TaskFrequencycount(SENDTASK);
     osDelay(1);
 	  
