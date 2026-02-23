@@ -40,6 +40,8 @@ uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t le
 uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf);
 void fdcan1_rx_callback(void);
 void can_SendCmd(uint8_t *cmd, uint32_t len);
+void RS_MOTOR_PRE(FDCAN_HandleTypeDef *hcan,uint16_t id);
+uint8_t fdcan2send_test(FDCAN_HandleTypeDef *hcan,uint16_t id);
 //void fdcan2_rx_callback(void);
 //void fdcan3_rx_callback(void);
 

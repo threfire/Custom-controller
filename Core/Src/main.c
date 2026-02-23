@@ -55,6 +55,14 @@
 uint8_t uart7_rebuffer[10];
 uint8_t miro_uart7_rebuffer[10];
 uint8_t uart1_rebuffer[10];
+
+uint8_t ret;
+uint32_t error;
+HAL_FDCAN_StateTypeDef state;
+uint32_t cccr;
+uint32_t psr;
+uint32_t ecr;
+uint32_t fill;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,13 +111,24 @@ int main(void)
   MX_UART7_Init();
   MX_FDCAN1_Init();
   MX_TIM6_Init();
+  MX_FDCAN2_Init();
   /* USER CODE BEGIN 2 */
+  bsp_can_init();
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2);
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)*2);
 
 //	__HAL_UART_ENABLE_IT(&huart7,UART_IT_IDLE);
 	HAL_Delay (2000);
 	HAL_TIM_Base_Start_IT(&htim6);
+	
+	RS_MOTOR_PRE(&hfdcan2, 0X01);
+	ret = fdcan2send_test(&hfdcan2, 0X01);
+	state = HAL_FDCAN_GetState(&hfdcan2);
+	error = HAL_FDCAN_GetError(&hfdcan2);
+	cccr = hfdcan2.Instance->CCCR;
+	psr = hfdcan2.Instance->PSR;
+	ecr = hfdcan2.Instance->ECR;
+	fill = HAL_FDCAN_GetTxFifoFreeLevel	(&hfdcan2);
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */

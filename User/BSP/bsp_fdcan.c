@@ -8,6 +8,11 @@ __IO CAN_ErrorStatus can_error_status = CAN_ERROR_NONE;
 uint8_t rx_data1[8] = {0};
 uint16_t rec_id1;
 
+uint8_t rx_data2[8] = {0};
+uint16_t rec_id2;
+
+uint8_t RS_MOTOR_PRE_MODE[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFD}; // 灵足电机私有模式
+uint8_t send_test[8]={1, 2, 3, 4, 5, 6, 7, 8};
 /**
 ************************************************************************
 * @brief:      	bsp_can_init(void)
@@ -20,6 +25,28 @@ void bsp_can_init(void)
 {
 	can_filter_init();
 	HAL_FDCAN_Start(&hfdcan1);                               //启动FDCAN
+	uint32_t *pRAM = (uint32_t*)(SRAMCAN_BASE + (260 * 4));
+	// 假设FDCAN2总配置需要最大100字（可根据实际估算，安全起见可清零剩余所有）
+	for (int i = 0; i < 512 - 260; i++) {
+		pRAM[i] = 0x00000000;
+	}
+	HAL_StatusTypeDef status = HAL_FDCAN_Start(&hfdcan2);
+	if (status != HAL_OK) {
+		// 启动失败，记录错误
+		can_error_status |= CAN_ERROR_SEND;
+	}
+	// 即使返回 HAL_OK，也要手动验证 INIT 位是否清零
+	uint32_t timeout = 1000;
+	while ((hfdcan2.Instance->CCCR & FDCAN_CCCR_INIT) && timeout--) {
+		// 等待
+	}
+	if (timeout == 0) {
+		// INIT 位仍未清零，启动失败
+		can_error_status |= CAN_ERROR_SEND;
+	}
+	hfdcan2.Instance->CCCR |= FDCAN_CCCR_CCE;   // 允许配置更改
+	hfdcan2.Instance->CCCR &= ~FDCAN_CCCR_INIT; // 清除 INIT
+	while (hfdcan2.Instance->CCCR & FDCAN_CCCR_INIT); // 等待清除
 	HAL_FDCAN_ActivateNotification(&hfdcan1, 
                                FDCAN_IT_RX_FIFO0_NEW_MESSAGE |
                                FDCAN_IT_ERROR_WARNING |
@@ -28,6 +55,11 @@ void bsp_can_init(void)
                                FDCAN_IT_ARB_PROTOCOL_ERROR |
                                FDCAN_IT_DATA_PROTOCOL_ERROR,
                                0);
+	if(HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0) != HAL_OK)
+	{
+		can_error_status |= CAN_ERROR_SEND;
+		Error_Handler();
+	}
 }
 
 /**
@@ -50,7 +82,7 @@ void can_filter_init(void)
 	fdcan_filter.FilterID2 = 0x0000;                               // 滤波器ID2
 
 	HAL_FDCAN_ConfigFilter(&hfdcan1, &fdcan_filter);
-	
+	HAL_FDCAN_ConfigFilter(&hfdcan2, &fdcan_filter);
 	// 配置全局滤波器：拒绝所有不匹配的帧
 	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, 
 //		FDCAN_REJECT, 
@@ -59,8 +91,16 @@ void can_filter_init(void)
 		FDCAN_ACCEPT_IN_RX_FIFO0,  // 接收所有扩展帧
 		FDCAN_FILTER_REMOTE, 
 		FDCAN_FILTER_REMOTE);
-		
+	
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, 
+//		FDCAN_REJECT, 
+//		FDCAN_REJECT, 
+		FDCAN_ACCEPT_IN_RX_FIFO0,  // 接收所有标准帧
+		FDCAN_ACCEPT_IN_RX_FIFO0,  // 接收所有扩展帧
+		FDCAN_FILTER_REMOTE, 
+		FDCAN_FILTER_REMOTE);	
 	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO0, 1);
+	HAL_FDCAN_ConfigFifoWatermark(&hfdcan2, FDCAN_CFG_RX_FIFO0, 1);
 }
 /**
 ************************************************************************
@@ -76,6 +116,9 @@ void can_filter_init(void)
 uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t len)
 {	
     FDCAN_TxHeaderTypeDef pTxHeader;
+	
+	 memset(&pTxHeader, 0, sizeof(FDCAN_TxHeaderTypeDef));
+	
     pTxHeader.Identifier = id;
     pTxHeader.IdType = FDCAN_STANDARD_ID;
     pTxHeader.TxFrameType = FDCAN_DATA_FRAME;
@@ -94,9 +137,16 @@ uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t le
  
 	if(HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &pTxHeader, data) != HAL_OK) 
 		return 1; // 失败
-	return 0; // 成功	
+	return 2; // 成功	
 }
 
+void RS_MOTOR_PRE(FDCAN_HandleTypeDef *hcan,uint16_t id){
+	fdcanx_send_data(hcan, id, RS_MOTOR_PRE_MODE, 8);
+}
+uint8_t fdcan2send_test(FDCAN_HandleTypeDef *hcan,uint16_t id){
+	
+	return	fdcanx_send_data(hcan, id, send_test, 8);
+}
 /**
 ************************************************************************
 * @brief:      	fdcanx_receive(FDCAN_HandleTypeDef *hfdcan, uint16_t *rec_id, uint8_t *buf)
@@ -205,6 +255,10 @@ void fdcan1_rx_callback(void)
     process_zdt_can_frame(rec_id1, rx_data1, len);               // 解析 ZDT 数据帧
 }
 
+void fdcan2_rx_callback(void)
+{
+	fdcanx_receive(&hfdcan2, &rec_id2, rx_data2);
+}
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
@@ -212,10 +266,10 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 	{
 		fdcan1_rx_callback();
 	}
-//	if(hfdcan == &hfdcan2)
-//	{
-//		fdcan2_rx_callback();
-//	}
+	if(hfdcan == &hfdcan2)
+	{
+		fdcan2_rx_callback();
+	}
 //	if(hfdcan == &hfdcan3)
 //	{
 //		fdcan3_rx_callback();

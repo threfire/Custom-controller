@@ -89,7 +89,6 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackTy
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 	Servo_Mapping_Init();
-	bsp_can_init();
 	motor_mapping_init();
   /* USER CODE END Init */
 
@@ -193,7 +192,7 @@ void Robot_TASK(void const * argument)
 	  #endif
 	  
 	  #if controller_mode == zdt_controller
-	  Set_Taget_Torque();
+//	  Set_Taget_Torque();
 	  #endif
 	  TaskFrequencycount(SENDTASK);
     osDelay(1);
