@@ -5,6 +5,8 @@
 __IO CAN_t can = {0};
 __IO CAN_ErrorStatus can_error_status = CAN_ERROR_NONE;
 
+uint8_t len1,len2;
+
 uint8_t rx_data1[8] = {0};
 uint16_t rec_id1;
 uint8_t rx_data2[8] = {0};
@@ -165,6 +167,12 @@ static inline void MITFdbData(MITMeasure_t *MIT_measure, const uint8_t rx_data[8
     MIT_measure->t_motor = (float)(rx_data[7]);
 }
 
+void Motor_save_zero(FDCAN_HandleTypeDef *hcan, uint16_t id)
+{
+	fdcanx_send_data(hcan, id, MOTOR_Save_zero, 8);
+}
+
+
 /**
 ************************************************************************
 * @brief:      	fdcanx_receive(FDCAN_HandleTypeDef *hfdcan, uint16_t *rec_id, uint8_t *buf)
@@ -175,12 +183,33 @@ static inline void MITFdbData(MITMeasure_t *MIT_measure, const uint8_t rx_data[8
 * @details:    	接收数据
 ************************************************************************
 **/
-uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
+uint8_t fdcan1_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 {	
 	FDCAN_RxHeaderTypeDef pRxHeader;
 	uint8_t len = 0;
 	
 	if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &pRxHeader, buf) == HAL_OK)
+	{
+		// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
+		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
+		
+		// 经典CAN模式下，数据长度直接就是字节数
+		len = pRxHeader.DataLength >> 16;
+		if(len > 8) {
+			len = 8; // 确保不超过8字节
+		}
+		
+		return len; // 返回数据长度
+	}
+	return 0;	
+}
+
+uint8_t fdcan2_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
+{	
+	FDCAN_RxHeaderTypeDef pRxHeader;
+	uint8_t len = 0;
+	
+	if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &pRxHeader, buf) == HAL_OK)
 	{
 		// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
 		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
@@ -275,12 +304,12 @@ void can_SendCmd(uint8_t *cmd, uint32_t len)
 
 void fdcan1_rx_callback(void)
 {
-	uint8_t len = fdcanx_receive(&hfdcan1, &rec_id1, rx_data1);  // 获取实际数据长度
-    process_zdt_can_frame(rec_id1, rx_data1, len);               // 解析 ZDT 数据帧
+	len1 = fdcan1_receive(&hfdcan1, &rec_id1, rx_data1);  // 获取实际数据长度
+    process_zdt_can_frame(rec_id1, rx_data1, len1);               // 解析 ZDT 数据帧
 }
 void fdcan2_rx_callback(void)
 {
-	fdcanx_receive(&hfdcan2, &rec_id2, rx_data2);
+	len2 = fdcan2_receive(&hfdcan2, &rec_id2, rx_data2);
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)

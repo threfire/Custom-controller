@@ -178,7 +178,7 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
 void Get_theta(MotorCurrentInfo *motor_currents)
 {
     theta[0] = PI/2;
-    theta[1] = -motor_currents[1].position / 180.0f;   
+    theta[1] = -motor_currents[1].position;   
     theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
     theta[3] = motor_currents[3].position*PI / 180.0f;
     theta[4] = motor_currents[4].position*PI / 180.0f;

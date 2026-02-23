@@ -76,14 +76,15 @@ void bsp_can_init(void);
 void can1_filter_init(void);
 void can2_filter_init(void);
 uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t len);
-uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf);
+uint8_t fdcan1_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf);
+uint8_t fdcan2_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf);
 void fdcan1_rx_callback(void);
 void can_SendCmd(uint8_t *cmd, uint32_t len);
 //void fdcan2_rx_callback(void);
 //void fdcan3_rx_callback(void);
 
-void CAN_cmd_MIT(FDCAN_HandleTypeDef *hcan,uint16_t id, float _pos, float _vel,
-float _KP, float _KD, float _torq);
+void CAN_cmd_MIT(FDCAN_HandleTypeDef *hcan,uint16_t id, float _pos, float _vel, float _KP, float _KD, float _torq);
+void Motor_save_zero(FDCAN_HandleTypeDef *hcan, uint16_t id);
 
 extern float uint_to_float(int x_int, float x_min, float x_max, int bits);
 extern int float_to_uint(float x, float x_min, float x_max, int bits);

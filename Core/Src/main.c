@@ -41,7 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DEBUG 0		//调试模式
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -116,8 +116,11 @@ int main(void)
 //	__HAL_UART_ENABLE_IT(&huart7,UART_IT_IDLE);
 	HAL_Delay (2000);
 	HAL_TIM_Base_Start_IT(&htim6);
-	
-//	fdcanx_send_data(&hfdcan2, 0x01,can2send_test, 8);
+	/*CAN独立指令发送*/
+	#if DEBUG
+	Motor_save_zero(&hfdcan2, 0x02);
+//	fdcanx_send_data(&hfdcan2, 0x02,can2send_test, 8);
+	#endif
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */
