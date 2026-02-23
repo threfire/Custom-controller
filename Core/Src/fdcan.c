@@ -95,8 +95,8 @@ void MX_FDCAN2_Init(void)
   hfdcan2.Init.ProtocolException = ENABLE;
   hfdcan2.Init.NominalPrescaler = 1;
   hfdcan2.Init.NominalSyncJumpWidth = 20;
-  hfdcan2.Init.NominalTimeSeg1 = 119;
-  hfdcan2.Init.NominalTimeSeg2 = 40;
+  hfdcan2.Init.NominalTimeSeg1 = 59;
+  hfdcan2.Init.NominalTimeSeg2 = 20;
   hfdcan2.Init.DataPrescaler = 1;
   hfdcan2.Init.DataSyncJumpWidth = 2;
   hfdcan2.Init.DataTimeSeg1 = 13;

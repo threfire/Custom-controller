@@ -5,7 +5,6 @@
 #include "Gravity_comp.h"
 
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
-
 uint8_t transmitBuffer[9];
 uint8_t len;
 static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum

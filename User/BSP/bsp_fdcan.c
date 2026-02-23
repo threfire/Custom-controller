@@ -23,7 +23,7 @@ static float mit_vel_lpf = 0.0f;
   MIT 电机反馈帧结构体
 */
 MITMeasure_t MIT_MOTOR_MEASURE;   // 单个电机反馈结构体
-
+extern MotorCurrentInfo MotorCurrents[SERVOS_NUM];
 /**
 ************************************************************************
 * @brief:      	bsp_can_init(void)
@@ -186,7 +186,11 @@ uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
 		
 		MITFdbData(&MIT_MOTOR_MEASURE, buf); 
-		
+		MotorCurrents[1].position = MIT_MOTOR_MEASURE.pos;
+		if(MotorCurrents[1].position >= 0)
+			MotorCurrents[1].dir = 0;
+		else
+			MotorCurrents[1].dir = 1;
 		// 经典CAN模式下，数据长度直接就是字节数
 		len = pRxHeader.DataLength >> 16;
 		if(len > 8) {
