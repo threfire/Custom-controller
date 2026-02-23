@@ -117,7 +117,7 @@ int main(void)
 	HAL_Delay (2000);
 	HAL_TIM_Base_Start_IT(&htim6);
 	
-	fdcanx_send_data(&hfdcan2, 0x01,can2send_test, 8);
+//	fdcanx_send_data(&hfdcan2, 0x01,can2send_test, 8);
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */

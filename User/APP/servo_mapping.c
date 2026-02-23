@@ -116,8 +116,9 @@ void Read_zdt_Pos(void)
 }
 void Set_Taget_Torque(void)
 {
-
-	/*发送补偿力矩*/
+	/*发送rs补偿力矩*/
+	CAN_cmd_MIT(&hfdcan2, 0x02, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+	/*发送zdt补偿力矩*/
 	ZDT_X42_V2_Torque_Control(3, 0, 1,10,0);
 	ZDT_X42_V2_Torque_Control(4, 0, 1,10,0);
 	ZDT_X42_V2_Torque_Control(5, 0, 1,10,0);

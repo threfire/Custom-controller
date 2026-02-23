@@ -6,6 +6,44 @@
 
 #define hcan_t FDCAN_HandleTypeDef
 
+
+//支持MIT协议才用
+#define P_MIN -12.5663704f		//位置最小值
+#define P_MAX 12.5663704f		//位置最大值
+#define V_MIN -45			//速度最小值
+#define V_MAX 45			//速度最大值
+#define KP_MIN 0.0		//Kp最小值
+#define KP_MAX 500.0	//Kp最大值
+#define KD_MIN 0.0		//Kd最小值
+#define KD_MAX 5.0		//Kd最大值
+//需要根据每个电机的不同来选择
+//所以建议在送入发送函数之前进行限幅，
+#define T_MIN -1.0f			//转矩最大值
+#define T_MAX 1.0f			//转矩最小值
+
+typedef struct
+{
+    //原始数据
+    int id;
+    int state;
+    int p_int;
+    int v_int;
+    int t_int;
+    int kp_int;
+    int kd_int;
+    //计算后的数据
+    float pos;
+    float vel;
+    float tor; //电机反馈的力矩
+    float Kp;
+    float Kd;
+    float t_mos; //mos温度
+    float t_motor; //电机温度
+		
+		float motor_t;//计算出的电机力矩
+		uint32_t last_fdb_time; //电机反馈时间
+} MITMeasure_t;
+
 typedef struct {
 	
 	__IO bool rxFrameFlag;
@@ -43,6 +81,12 @@ void fdcan1_rx_callback(void);
 void can_SendCmd(uint8_t *cmd, uint32_t len);
 //void fdcan2_rx_callback(void);
 //void fdcan3_rx_callback(void);
+
+void CAN_cmd_MIT(FDCAN_HandleTypeDef *hcan,uint16_t id, float _pos, float _vel,
+float _KP, float _KD, float _torq);
+
+extern float uint_to_float(int x_int, float x_min, float x_max, int bits);
+extern int float_to_uint(float x, float x_min, float x_max, int bits);
 
 #endif /* __BSP_FDCAN_H_ */
 

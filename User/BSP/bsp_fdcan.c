@@ -9,6 +9,21 @@ uint8_t rx_data1[8] = {0};
 uint16_t rec_id1;
 uint8_t rx_data2[8] = {0};
 uint16_t rec_id2;
+
+uint8_t MOTOR_Data[8]={0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // 电机数据
+
+uint8_t MOTOR_Enable[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC};   // 电机使能命令
+uint8_t MOTOR_Save_zero[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE}; // 电机保存零点命令
+uint8_t RS_MOTOR_PRE_MODE[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFD}; // 灵足电机私有模式
+
+// MIT 速度滤波缓冲（抑制近似正弦噪声）
+static float mit_vel_lpf = 0.0f;
+
+/*
+  MIT 电机反馈帧结构体
+*/
+MITMeasure_t MIT_MOTOR_MEASURE;   // 单个电机反馈结构体
+
 /**
 ************************************************************************
 * @brief:      	bsp_can_init(void)
@@ -127,6 +142,30 @@ uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t le
 }
 
 /**
+ * @brief  MITFdbData: 获取 MIT 电机反馈数据（内联），含速度低通滤波
+ * @note   vel 噪声近似正弦，使用一阶低通平滑
+ */
+static inline void MITFdbData(MITMeasure_t *MIT_measure, const uint8_t rx_data[8])
+{
+    MIT_measure->id = (rx_data[0]) & 0x0F;
+    MIT_measure->state = (rx_data[0]) >> 4;
+    MIT_measure->p_int = ((rx_data[1] << 8) | rx_data[2]);
+    MIT_measure->v_int = ((rx_data[3] << 4) | (rx_data[4] >> 4));
+    MIT_measure->t_int = (((rx_data[4] & 0xF) << 8) | rx_data[5]);
+    MIT_measure->pos = uint_to_float(MIT_measure->p_int, P_MIN, P_MAX, 16);
+
+    const float vel_raw = uint_to_float(MIT_measure->v_int, V_MIN, V_MAX, 12);
+    const float alpha = 0.15f;
+    // 一阶低通滤波，直接操作全局静态变量 mit_vel_lpf
+    mit_vel_lpf = mit_vel_lpf + alpha * (vel_raw - mit_vel_lpf);
+    MIT_measure->vel = mit_vel_lpf;
+
+    MIT_measure->tor = uint_to_float(MIT_measure->t_int, T_MIN, T_MAX, 12);
+    MIT_measure->t_mos = (float)(rx_data[6]);
+    MIT_measure->t_motor = (float)(rx_data[7]);
+}
+
+/**
 ************************************************************************
 * @brief:      	fdcanx_receive(FDCAN_HandleTypeDef *hfdcan, uint16_t *rec_id, uint8_t *buf)
 * @param:       hfdcan：FDCAN句柄
@@ -145,6 +184,8 @@ uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 	{
 		// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
 		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
+		
+		MITFdbData(&MIT_MOTOR_MEASURE, buf); 
 		
 		// 经典CAN模式下，数据长度直接就是字节数
 		len = pRxHeader.DataLength >> 16;
@@ -269,4 +310,40 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
         if (hal_error & FDCAN_IT_DATA_PROTOCOL_ERROR) can_error_status |= CAN_ERROR_PROTOCOL_DATA;
        
     }
+}
+
+void CAN_cmd_MIT(FDCAN_HandleTypeDef *hcan,uint16_t id, float _pos, float _vel,
+float _KP, float _KD, float _torq)
+ { 
+	uint16_t pos_tmp,vel_tmp,kp_tmp,kd_tmp,tor_tmp;
+	pos_tmp = float_to_uint(_pos, P_MIN, P_MAX, 16);
+	vel_tmp = float_to_uint(_vel, V_MIN, V_MAX, 12);
+	kp_tmp = float_to_uint(_KP, KP_MIN, KP_MAX, 12);
+	kd_tmp = float_to_uint(_KD, KD_MIN, KD_MAX, 12);
+	tor_tmp = float_to_uint(_torq, T_MIN, T_MAX, 12);
+
+	
+	MOTOR_Data[0] = (pos_tmp >> 8);
+	MOTOR_Data[1] = pos_tmp;
+	MOTOR_Data[2] = (vel_tmp >> 4);
+	MOTOR_Data[3] = ((vel_tmp&0xF)<<4)|(kp_tmp>>8);
+	MOTOR_Data[4] = kp_tmp;
+	MOTOR_Data[5] = (kd_tmp >> 4);
+	MOTOR_Data[6] = ((kd_tmp&0xF)<<4)|(tor_tmp>>8);
+	MOTOR_Data[7] = tor_tmp;
+	
+	fdcanx_send_data(hcan, id , MOTOR_Data, 8);
+ }
+ 
+ 
+ float uint_to_float(int x_int, float x_min, float x_max, int bits){
+ float span = x_max - x_min;
+ float offset = x_min;
+ return ((float)x_int)*span/((float)((1<<bits)-1)) + offset;
+}
+
+int float_to_uint(float x, float x_min, float x_max, int bits){
+ float span = x_max - x_min;
+ float offset = x_min;
+ return (int) ((x-offset)*((float)((1<<bits)-1))/span);
 }
