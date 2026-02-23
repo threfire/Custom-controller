@@ -7,7 +7,8 @@ __IO CAN_ErrorStatus can_error_status = CAN_ERROR_NONE;
 
 uint8_t rx_data1[8] = {0};
 uint16_t rec_id1;
-
+uint8_t rx_data2[8] = {0};
+uint16_t rec_id2;
 /**
 ************************************************************************
 * @brief:      	bsp_can_init(void)
@@ -18,8 +19,10 @@ uint16_t rec_id1;
 **/
 void bsp_can_init(void)
 {
-	can_filter_init();
+	can1_filter_init();
+	can2_filter_init();
 	HAL_FDCAN_Start(&hfdcan1);                               //启动FDCAN
+	HAL_FDCAN_Start(&hfdcan2);
 	HAL_FDCAN_ActivateNotification(&hfdcan1, 
                                FDCAN_IT_RX_FIFO0_NEW_MESSAGE |
                                FDCAN_IT_ERROR_WARNING |
@@ -28,6 +31,7 @@ void bsp_can_init(void)
                                FDCAN_IT_ARB_PROTOCOL_ERROR |
                                FDCAN_IT_DATA_PROTOCOL_ERROR,
                                0);
+	HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
 }
 
 /**
@@ -38,7 +42,7 @@ void bsp_can_init(void)
 * @details:    	CAN滤波器初始化
 ************************************************************************
 **/
-void can_filter_init(void)
+void can1_filter_init(void)
 {
 	FDCAN_FilterTypeDef fdcan_filter;
 	
@@ -61,6 +65,31 @@ void can_filter_init(void)
 		FDCAN_FILTER_REMOTE);
 		
 	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO0, 1);
+}
+
+void can2_filter_init(void)
+{
+	FDCAN_FilterTypeDef fdcan_filter;
+	
+	fdcan_filter.IdType = FDCAN_EXTENDED_ID;                       // 改为扩展ID
+	fdcan_filter.FilterIndex = 0;                                  // 滤波器索引                   
+	fdcan_filter.FilterType = FDCAN_FILTER_MASK;                   
+	fdcan_filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO1;           // 过滤器0关联到FIFO0  
+	fdcan_filter.FilterID1 = 0x0000;                               // 滤波器ID1
+	fdcan_filter.FilterID2 = 0x0000;                               // 滤波器ID2
+
+	HAL_FDCAN_ConfigFilter(&hfdcan2, &fdcan_filter);
+	
+	// 配置全局滤波器：拒绝所有不匹配的帧
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, 
+//		FDCAN_REJECT, 
+//		FDCAN_REJECT, 
+		FDCAN_ACCEPT_IN_RX_FIFO1,  // 接收所有标准帧
+		FDCAN_ACCEPT_IN_RX_FIFO1,  // 接收所有扩展帧
+		FDCAN_FILTER_REMOTE, 
+		FDCAN_FILTER_REMOTE);
+		
+	HAL_FDCAN_ConfigFifoWatermark(&hfdcan2, FDCAN_CFG_RX_FIFO1, 1);
 }
 /**
 ************************************************************************
@@ -204,7 +233,10 @@ void fdcan1_rx_callback(void)
 	uint8_t len = fdcanx_receive(&hfdcan1, &rec_id1, rx_data1);  // 获取实际数据长度
     process_zdt_can_frame(rec_id1, rx_data1, len);               // 解析 ZDT 数据帧
 }
-
+void fdcan2_rx_callback(void)
+{
+	fdcanx_receive(&hfdcan2, &rec_id2, rx_data2);
+}
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
@@ -212,16 +244,14 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 	{
 		fdcan1_rx_callback();
 	}
-//	if(hfdcan == &hfdcan2)
-//	{
-//		fdcan2_rx_callback();
-//	}
-//	if(hfdcan == &hfdcan3)
-//	{
-//		fdcan3_rx_callback();
-//	}
 }
-
+void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+    if(hfdcan == &hfdcan2)
+	{
+		fdcan2_rx_callback();
+	}
+}
 void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
 {
     if (hfdcan == &hfdcan1) {

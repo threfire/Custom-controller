@@ -35,7 +35,8 @@ extern __IO CAN_ErrorStatus can_error_status;
 void ZDT_Compatible_Receive_Data(uint8_t *rxCmd, uint8_t *rxCount);
 
 void bsp_can_init(void);
-void can_filter_init(void);
+void can1_filter_init(void);
+void can2_filter_init(void);
 uint8_t fdcanx_send_data(hcan_t *hfdcan, uint16_t id, uint8_t *data, uint32_t len);
 uint8_t fdcanx_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf);
 void fdcan1_rx_callback(void);

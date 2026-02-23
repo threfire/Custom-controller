@@ -55,6 +55,8 @@
 uint8_t uart7_rebuffer[10];
 uint8_t miro_uart7_rebuffer[10];
 uint8_t uart1_rebuffer[10];
+
+uint8_t can2send_test[8] = {0xff,0xff,0xff,0xff,0xff,0xff,0x00,0xfd};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,13 +105,19 @@ int main(void)
   MX_UART7_Init();
   MX_FDCAN1_Init();
   MX_TIM6_Init();
+  MX_FDCAN2_Init();
   /* USER CODE BEGIN 2 */
+  	Servo_Mapping_Init();
+	bsp_can_init();
+	motor_mapping_init();
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2);
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)*2);
 
 //	__HAL_UART_ENABLE_IT(&huart7,UART_IT_IDLE);
 	HAL_Delay (2000);
 	HAL_TIM_Base_Start_IT(&htim6);
+	
+	fdcanx_send_data(&hfdcan2, 0x01,can2send_test, 8);
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */
