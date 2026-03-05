@@ -165,8 +165,9 @@ void Servo_TASK(void const * argument)
 	  #endif
 	  #if controller_mode == zdt_controller
 	  Read_zdt_Pos();
+	  TaskFrequencycount(GETTASK);
 	  #endif
-	osDelay(10);
+	osDelay(12);
 	
 
   }
@@ -183,6 +184,7 @@ void Servo_TASK(void const * argument)
 void Robot_TASK(void const * argument)
 {
   /* USER CODE BEGIN Robot_TASK */
+	motor_mapping_init();
   /* Infinite loop */
   for(;;)
   {
@@ -194,7 +196,7 @@ void Robot_TASK(void const * argument)
 	  Set_Taget_Torque();
 	  #endif
 	  TaskFrequencycount(SENDTASK);
-    osDelay(1);
+    osDelay(5);
 	  
   }
   /* USER CODE END Robot_TASK */

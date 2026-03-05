@@ -17,7 +17,7 @@ uint8_t MOTOR_Data[8]={0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // µç»úÊ
 uint8_t MOTOR_Enable[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFC};   // µç»úÊ¹ÄÜÃüÁî
 uint8_t MOTOR_Save_zero[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE}; // µç»ú±£´æÁãµãÃüÁî
 uint8_t RS_MOTOR_PRE_MODE[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFD}; // Áé×ãµç»úË½ÓÐÄ£Ê½
-
+uint8_t RS_MOTOR_MIT_MODE[8]={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0xFD}; // Áé×ãµç»úË½ÓÐÄ£Ê½
 // MIT ËÙ¶ÈÂË²¨»º³å£¨ÒÖÖÆ½üËÆÕýÏÒÔëÉù£©
 static float mit_vel_lpf = 0.0f;
 
@@ -167,9 +167,19 @@ static inline void MITFdbData(MITMeasure_t *MIT_measure, const uint8_t rx_data[8
     MIT_measure->t_motor = (float)(rx_data[7]);
 }
 
+
+void Motor_ENABLE(FDCAN_HandleTypeDef *hcan, uint16_t id)
+{
+	canx_send_data(hcan, id, MOTOR_Enable, 8);
+}
+
 void Motor_save_zero(FDCAN_HandleTypeDef *hcan, uint16_t id)
 {
-	fdcanx_send_data(hcan, id, MOTOR_Save_zero, 8);
+	canx_send_data(hcan, id, MOTOR_Save_zero, 8);
+}
+void Motor_MIT_MODE(FDCAN_HandleTypeDef *hcan, uint16_t id)
+{
+	canx_send_data(hcan, id, RS_MOTOR_MIT_MODE, 8);
 }
 
 
@@ -365,8 +375,61 @@ float _KP, float _KD, float _torq)
 	MOTOR_Data[6] = ((kd_tmp&0xF)<<4)|(tor_tmp>>8);
 	MOTOR_Data[7] = tor_tmp;
 	
-	fdcanx_send_data(hcan, id , MOTOR_Data, 8);
+	canx_send_data(hcan, id , MOTOR_Data, 8);
  }
+ 
+ uint32_t g_can_fail_len = 0xFFFF; 
+ uint8_t canx_send_data(FDCAN_HandleTypeDef *hcan, uint16_t id, uint8_t *data, uint32_t len)
+{
+	g_can_fail_len = len;
+	FDCAN_TxHeaderTypeDef TxHeader;
+	
+	TxHeader.Identifier = id;                 // CAN ID
+  TxHeader.IdType =  FDCAN_STANDARD_ID ;        
+  TxHeader.TxFrameType = FDCAN_DATA_FRAME;  
+  if(len<=8)	
+	{
+	  TxHeader.DataLength = len<<16;    // ·¢ËÍ³¤¶È£º8byte
+	}
+	else  if(len==12)	
+	{
+	   TxHeader.DataLength =FDCAN_DLC_BYTES_12;
+	}
+	else  if(len==16)	
+	{
+	  TxHeader.DataLength =FDCAN_DLC_BYTES_16;
+	
+	}
+  else  if(len==20)
+	{
+		TxHeader.DataLength =FDCAN_DLC_BYTES_20;
+	}		
+	else  if(len==24)	
+	{
+	 TxHeader.DataLength =FDCAN_DLC_BYTES_24;	
+	}else  if(len==48)
+	{
+	 TxHeader.DataLength =FDCAN_DLC_BYTES_48;
+	}else  if(len==64)
+   {
+		 TxHeader.DataLength =FDCAN_DLC_BYTES_64;
+	 }									
+	TxHeader.ErrorStateIndicator =  FDCAN_ESI_ACTIVE;
+  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;//±ÈÌØÂÊÇÐ»»¹Ø±Õ£¬²»ÊÊÓÃÓÚ¾­µäCAN
+  TxHeader.FDFormat =  FDCAN_CLASSIC_CAN;            // CANFD
+  TxHeader.TxEventFifoControl =  FDCAN_NO_TX_EVENTS;  
+  TxHeader.MessageMarker = 0;//ÏûÏ¢±ê¼Ç
+
+   // ·¢ËÍCANÖ¸Áî
+  if(HAL_FDCAN_AddMessageToTxFifoQ(hcan, &TxHeader, data) != HAL_OK)
+  {
+       // ·¢ËÍÊ§°Ü´¦Àí
+//       Error_Handler();      
+  }
+//	 HAL_FDCAN_AddMessageToTxFifoQ(hcan, &TxHeader, data);
+	 return 0;
+
+}
  
  
  float uint_to_float(int x_int, float x_min, float x_max, int bits){

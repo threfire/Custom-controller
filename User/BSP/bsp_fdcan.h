@@ -18,8 +18,8 @@
 #define KD_MAX 5.0		//Kd最大值
 //需要根据每个电机的不同来选择
 //所以建议在送入发送函数之前进行限幅，
-#define T_MIN -1.0f			//转矩最大值
-#define T_MAX 1.0f			//转矩最小值
+#define T_MIN -100.0f			//转矩最大值
+#define T_MAX 100.0f			//转矩最小值
 
 typedef struct
 {
@@ -82,10 +82,11 @@ void fdcan1_rx_callback(void);
 void can_SendCmd(uint8_t *cmd, uint32_t len);
 //void fdcan2_rx_callback(void);
 //void fdcan3_rx_callback(void);
-
+ uint8_t canx_send_data(FDCAN_HandleTypeDef *hcan, uint16_t id, uint8_t *data, uint32_t len);
 void CAN_cmd_MIT(FDCAN_HandleTypeDef *hcan,uint16_t id, float _pos, float _vel, float _KP, float _KD, float _torq);
 void Motor_save_zero(FDCAN_HandleTypeDef *hcan, uint16_t id);
-
+void Motor_ENABLE(FDCAN_HandleTypeDef *hcan, uint16_t id);
+void Motor_MIT_MODE(FDCAN_HandleTypeDef *hcan, uint16_t id);
 extern float uint_to_float(int x_int, float x_min, float x_max, int bits);
 extern int float_to_uint(float x, float x_min, float x_max, int bits);
 

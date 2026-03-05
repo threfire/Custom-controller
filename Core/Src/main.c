@@ -41,7 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DEBUG 0		//调试模式
+#define DEBUG 1		//调试模式
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -109,7 +109,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   	Servo_Mapping_Init();
 	bsp_can_init();
-	motor_mapping_init();
+	
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2);
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)*2);
 
@@ -118,7 +118,7 @@ int main(void)
 	HAL_TIM_Base_Start_IT(&htim6);
 	/*CAN独立指令发送*/
 	#if DEBUG
-	Motor_save_zero(&hfdcan2, 0x02);
+//	Motor_MIT_MODE(&hfdcan2, 0x02);
 //	fdcanx_send_data(&hfdcan2, 0x02,can2send_test, 8);
 	#endif
   /* USER CODE END 2 */

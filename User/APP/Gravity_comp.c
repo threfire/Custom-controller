@@ -54,17 +54,17 @@ static const float link_mass[N_JOINTS] = {
     0.140f,  /* 连杆3质量 */
     0.150f,  /* 连杆4质量 */
     0.050f,  /* 连杆5质量 */
-    0.095f   /* 连杆6质量 */
+    0.120f   /* 连杆6质量 */
 };
 
 /* 各连杆质心在自身连杆坐标系中的位置 (x, y, z) 单位：米 - 请替换为实际值 */
 static const float link_com[N_JOINTS][3] = {
     {0.0f, 0.0f, 0.1f},      /* 连杆1质心 (坐标系{1}) */
     {0.13f, 0.0f, -0.028f},  /* 连杆2质心 (坐标系{2}) */
-    {0.0f, 0.0f, 0.039f},    /* 连杆3质心 (坐标系{3}) */
-    {0.0f, 0.0f, -0.046f},   /* 连杆4质心 (坐标系{4}) */
+    {0.0f, 0.02f, 0.0f},    /* 连杆3质心 (坐标系{3}) */
+    {0.0f, 0.01f, -0.046f},   /* 连杆4质心 (坐标系{4}) */
     {0.0f, 0.0f, 0.00f},     /* 连杆5质心 (坐标系{5}) */
-    {0.0f, 0.0f, 0.035f}     /* 连杆6质心 (坐标系{6}) */
+    {-0.014f, -0.015f, 0.050f}     /* 连杆6质心 (坐标系{6}) */
 };
 /* ============================================================================ */
 
@@ -138,10 +138,22 @@ static void compute_transforms(const float theta[N_JOINTS], float T0_i[7][16]) {
 }
 
 /*------------------------ 重力补偿计算 ------------------------*/
+float theta_add[6] = {0, 0, 18, 0, -40, 4.5};
+//说明：如果输出力矩值变化大致符合要求，但是似乎存在偏置，那么在下方修改对应关节角度偏置即可
 void gravity_compensation(const float theta[N_JOINTS], float tau[N_JOINTS]) {
-    // 1. 计算所有连杆变换矩阵 T0_i[i] (i=0..6)
+    // 将实际关节角度转换为DH角度（考虑零点偏置）
+    float theta_dh[N_JOINTS];
+    for (int i = 0; i < N_JOINTS; i++) {
+        theta_dh[i] = theta[i];  // 默认无偏置
+    }
+    // 关节3（索引2）的偏置：实际0°对应DH -90°
+    theta_dh[2] = theta[2] + theta_add[2] * M_PI / 180.0f;
+	theta_dh[3] = theta[3] + theta_add[3] * M_PI / 180.0f;
+	theta_dh[4] = theta[4] + theta_add[4] * M_PI / 180.0f;
+	theta_dh[5] = theta[5] + theta_add[5] * M_PI / 180.0f;
+	// 1. 计算所有连杆变换矩阵 T0_i[i] (i=0..6)
     float T0_i[7][16];
-    compute_transforms(theta, T0_i);
+    compute_transforms(theta_dh, T0_i);
 
     // 2. 提取各坐标系原点位置 p_i 和 Z轴方向 z_i (基坐标系下)
     float p[7][3];

@@ -4,6 +4,13 @@
 #include "ZDT_X42_V2.h"
 #include "Gravity_comp.h"
 
+#define TAU_MAP_PARAM1 0
+#define TAU_MAP_PARAM2 8.5f
+#define TAU_MAP_PARAM3 7600
+#define TAU_MAP_PARAM4 2000
+#define TAU_MAP_PARAM5 18000
+#define TAU_MAP_PARAM6 20000
+
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 uint8_t transmitBuffer[9];
 uint8_t len;
@@ -24,7 +31,7 @@ JudgeTxFrame            txFrame;
 FrequencyCheck		   taskFrequencyCheck;
 
 MotorCurrentInfo MotorCurrents[SERVOS_NUM];
-
+extern MITMeasure_t MIT_MOTOR_MEASURE;
 void JustFloat_send(moterMapHeader *MoterMap);
 
 	
@@ -102,31 +109,64 @@ void motor_mapping_init(void)
 		MotorCurrents[i].position = 0.0f;
 		MotorCurrents[i].dir = 0;
     }
+	Motor_ENABLE(&hfdcan2 , 0x02);
+	Motor_save_zero(&hfdcan2 , 0x02);
 }
 void Read_zdt_Pos(void)
 {
+//	ZDT_X42_V2_Read_Sys_Params(1 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(3 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
 	Get_theta(MotorCurrents);
+	CustomController_AngleMapping();//角度映射计算
+	CustomController_StructSend(&MoterMap);//角度映射发送
 	/*计算重力补偿*/
 	gravity_compensation(theta, tau);
 }
+uint16_t send_tau[6];
+float send_tau_mit;
 void Set_Taget_Torque(void)
 {
+	
+	SendParam_Count(send_tau,tau);
 	/*发送rs补偿力矩*/
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0, send_tau_mit);
+//	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0, tau[1]*TAU_MAP_PARAM2);
 	/*发送zdt补偿力矩*/
-	ZDT_X42_V2_Torque_Control(3, 0, 1,10,0);
-	ZDT_X42_V2_Torque_Control(4, 0, 1,10,0);
-	ZDT_X42_V2_Torque_Control(5, 0, 1,10,0);
-	ZDT_X42_V2_Torque_Control(6, 0, 1,10,0);
+//	ZDT_X42_V2_Torque_Control(1, 0, 1,10,0);
+	ZDT_X42_V2_Torque_Control(3, MotorCurrents[2].dir, send_tau[2],send_tau[2],0);//1为顺时针
+	ZDT_X42_V2_Torque_Control(4, MotorCurrents[3].dir, send_tau[3],send_tau[3],0);//1为顺时针
+	ZDT_X42_V2_Torque_Control(5, MotorCurrents[4].dir, 10,10,0);
+	ZDT_X42_V2_Torque_Control(6, MotorCurrents[5].dir, 10,10,0);
 //	for(uint8_t i;i<6;i ++)
 //	{
 //		ZDT_X42_V2_Torque_Control(i, MotorCurrents[i].dir, tau[i]/2,tau[i],0);
 //	}
 }
+void SendParam_Count(uint16_t* send_tauqe, float * tauqe)
+{
+    for(uint8_t i = 0; i < 6; i++)
+    {
+        if(tauqe[i] >= 0)
+            MotorCurrents[i].dir = 1;
+        else
+            MotorCurrents[i].dir = 0;
+    }
+	send_tau_mit = tau[1]*TAU_MAP_PARAM2;
+	if(send_tau_mit > 9.6f)send_tau_mit = 9.6f;
+	else if(send_tau_mit < -9.6f)send_tau_mit = -9.6f;
+    send_tauqe[2] = (uint16_t)(fabsf(tauqe[2]) * TAU_MAP_PARAM3);
+    send_tauqe[2] = Limite_tauqe(send_tauqe[2], 2500, 0);   // 接收返回值
+    send_tauqe[3] = (uint16_t)(fabsf(tauqe[3]) * TAU_MAP_PARAM4);
+    send_tauqe[3] = Limite_tauqe(send_tauqe[3], 2000, 0);
+    send_tauqe[4] = (uint16_t)(fabsf(tauqe[4]) * TAU_MAP_PARAM5);
+    send_tauqe[4] = Limite_tauqe(send_tauqe[4], 2000, 0);
+    send_tauqe[5] = (uint16_t)(fabsf(tauqe[5]) * TAU_MAP_PARAM6);
+    send_tauqe[5] = Limite_tauqe(send_tauqe[5], 2000, 0);
+}
+
 #endif
 /**
   * @brief  处理从 CAN 接收到的 ZDT 电机位置数据帧
@@ -163,10 +203,7 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
 
     // 存入对应电机的结构体（ID 从 1 开始，数组索引为 id-1）
     MotorCurrents[id - 1].position = position;
-	if(position >= 0)
-		MotorCurrents[id - 1].dir = 0;
-	else
-		MotorCurrents[id - 1].dir = 1;
+	
 }
 /**
 * @brief  从电机位置得到dh参数θ角
@@ -174,15 +211,16 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
   * @param  
   * @param  
   * @retval None
+	如果遇到大小变化正确，但是符号相反等情况，要么修改alpha要么修改theta，取反应该就能让符号符合期望
   */
 void Get_theta(MotorCurrentInfo *motor_currents)
 {
     theta[0] = PI/2;
-    theta[1] = -motor_currents[1].position;   
+    theta[1] = motor_currents[1].position;   
     theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
     theta[3] = motor_currents[3].position*PI / 180.0f;
     theta[4] = motor_currents[4].position*PI / 180.0f;
-    theta[5] = -motor_currents[5].position*PI / 180.0f;
+    theta[5] = - motor_currents[5].position*PI / 180.0f;
 }
 /**
   * @brief  填充位置查询数据包
@@ -379,7 +417,7 @@ void CustomController_AngleMapping(void)
 //                
 //		}
 //		ServoMap.ZX_Data.totalCnt = 0;
-		
+	#if controller_mode == servo_controller
 		for(uint8_t i = 0; i < SERVOS_NUM; i++) {
 			Filtering_angle[i] = lowV(&Servos[i], Servos[i].angle);
 		}
@@ -391,13 +429,34 @@ void CustomController_AngleMapping(void)
 		MoterMap.j2         = - ScaleValue(Filtering_angle[2],J2_MIN,J2_MAX,2*PI/3,-2*PI/3);
 		MoterMap.j1         = - ScaleValue(Filtering_angle[1],J1_MIN,J1_MAX,2*PI/3,-2*PI/3);
 		MoterMap.j0         = - ScaleValue(Filtering_angle[0],J0_MIN,J0_MAX,2*PI/3,-2*PI/3);
+	#endif
+	#if controller_mode == zdt_controller
+		MoterMap.online = 1;
+		 // 定义输入范围常量
+		const float ANG_MIN = 0.0f;          // 角度制最小值
+		const float ANG_MAX = 180.0f;        // 角度制最大值
+		const float RAD_MIN = 0.0f;           // 弧度制最小值
+		const float RAD_MAX = PI;          // 弧度制最大值（用户指定）
+		const float OUT_MIN = 0;  // 输出下限
+		const float OUT_MAX = PI;  // 输出上限
 
-		LIMIT(MoterMap.j5       ,-2*PI/3	,2*PI/3	);
-		LIMIT(MoterMap.j4     	,-2*PI/3	,2*PI/3	);
-		LIMIT(MoterMap.j3    	,-2*PI/3	,2*PI/3	);
-		LIMIT(MoterMap.j2       ,-2*PI/3	,2*PI/3	);
-		LIMIT(MoterMap.j1       ,-2*PI/3	,2*PI/3	);
+		
+		MoterMap.j0 = MotorCurrents[0].position * PI / 180.0f;    // 
+		MoterMap.j1 = PI/2 - MotorCurrents[1].position;             // 
+		MoterMap.j2 = MotorCurrents[2].position * PI / 180.0f;    // 
+		MoterMap.j3 = MotorCurrents[3].position * PI / 180.0f;      // 
+		MoterMap.j4 = - MotorCurrents[4].position * PI / 180.0f;      // 
+		MoterMap.j5 = MotorCurrents[5].position * PI / 180.0f;      // 
+	#endif
+		
+		
+
 		LIMIT(MoterMap.j0       ,-2*PI/3	,2*PI/3	);
+		LIMIT(MoterMap.j1     	, -PI/2	    , PI/2	);
+		LIMIT(MoterMap.j2    	, -3*PI/4	,0	);
+		LIMIT(MoterMap.j3       ,-2*PI/3	,2*PI/3	);
+		LIMIT(MoterMap.j4       ,-2*PI/3	,2*PI/3	);
+		LIMIT(MoterMap.j5       ,-2*PI/3	,2*PI/3	);
       
 }
 
@@ -498,4 +557,11 @@ void JustFloat_send(moterMapHeader *MoterMap)
 	frame.fdata[5] = MoterMap->j5;
 	
 	HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&frame, sizeof(frame));
+}
+
+uint16_t Limite_tauqe(uint16_t send_tauqe, uint16_t max, uint16_t min)
+{
+    if(send_tauqe > max) send_tauqe = max;
+    if(send_tauqe < min) send_tauqe = min;
+    return send_tauqe;
 }

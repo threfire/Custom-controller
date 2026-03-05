@@ -56,6 +56,9 @@
 #define ANGLE_MIN 0
 #define ANGLE_MAX 1000
 
+#define J2_KP 4.0f
+#define J2_KD 0.5f
+
 #define LIMIT(x,min,max) (x)=(((x)<=(min))?(min):(((x)>=(max))?(max):(x)))
 
 #define ENABLE_KEY 0X01
@@ -167,4 +170,6 @@ void Read_zdt_Pos(void);
 void Set_Taget_Torque(void);
 void Get_theta(MotorCurrentInfo *motor_currents);
 void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len);
+void SendParam_Count(uint16_t* send_tauqe, float * tauqe);
+uint16_t Limite_tauqe(uint16_t send_tauqe, uint16_t max, uint16_t min);
 #endif
