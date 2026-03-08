@@ -5,10 +5,10 @@
 #include "Gravity_comp.h"
 
 #define TAU_MAP_PARAM1 0
-#define TAU_MAP_PARAM2 8.5f
-#define TAU_MAP_PARAM3 7600
-#define TAU_MAP_PARAM4 2000
-#define TAU_MAP_PARAM5 18000
+#define TAU_MAP_PARAM2 10.0f
+#define TAU_MAP_PARAM3 6600
+#define TAU_MAP_PARAM4 9000
+#define TAU_MAP_PARAM5 9800
 #define TAU_MAP_PARAM6 20000
 
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
@@ -118,7 +118,7 @@ void Read_zdt_Pos(void)
 	ZDT_X42_V2_Read_Sys_Params(3 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
 	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
-	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
+//	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
 	Get_theta(MotorCurrents);
 	CustomController_AngleMapping();//角度映射计算
 	CustomController_StructSend(&MoterMap);//角度映射发送
@@ -132,14 +132,14 @@ void Set_Taget_Torque(void)
 	
 	SendParam_Count(send_tau,tau);
 	/*发送rs补偿力矩*/
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0, send_tau_mit);
+	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.12, send_tau_mit);
 //	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0, tau[1]*TAU_MAP_PARAM2);
 	/*发送zdt补偿力矩*/
 //	ZDT_X42_V2_Torque_Control(1, 0, 1,10,0);
-	ZDT_X42_V2_Torque_Control(3, MotorCurrents[2].dir, send_tau[2],send_tau[2],0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(4, MotorCurrents[3].dir, send_tau[3],send_tau[3],0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(5, MotorCurrents[4].dir, 10,10,0);
-	ZDT_X42_V2_Torque_Control(6, MotorCurrents[5].dir, 10,10,0);
+	ZDT_X42_V2_Torque_Control(3, MotorCurrents[2].dir, 22500,send_tau[2],0);//1为顺时针
+	ZDT_X42_V2_Torque_Control(4, MotorCurrents[3].dir, 10000,send_tau[3],0);//1为顺时针
+	ZDT_X42_V2_Torque_Control(5, MotorCurrents[4].dir, 20000,send_tau[4],0);
+//	ZDT_X42_V2_Torque_Control(6, MotorCurrents[5].dir, 10,10,0);
 //	for(uint8_t i;i<6;i ++)
 //	{
 //		ZDT_X42_V2_Torque_Control(i, MotorCurrents[i].dir, tau[i]/2,tau[i],0);
@@ -218,8 +218,8 @@ void Get_theta(MotorCurrentInfo *motor_currents)
     theta[0] = PI/2;
     theta[1] = motor_currents[1].position;   
     theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
-    theta[3] = motor_currents[3].position*PI / 180.0f;
-    theta[4] = motor_currents[4].position*PI / 180.0f;
+    theta[3] = - motor_currents[3].position*PI / 180.0f;
+    theta[4] = - motor_currents[4].position*PI / 180.0f;
     theta[5] = - motor_currents[5].position*PI / 180.0f;
 }
 /**

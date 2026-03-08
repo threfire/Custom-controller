@@ -167,7 +167,7 @@ void Servo_TASK(void const * argument)
 	  Read_zdt_Pos();
 	  TaskFrequencycount(GETTASK);
 	  #endif
-	osDelay(12);
+	osDelay(3);
 	
 
   }
@@ -196,7 +196,7 @@ void Robot_TASK(void const * argument)
 	  Set_Taget_Torque();
 	  #endif
 	  TaskFrequencycount(SENDTASK);
-    osDelay(5);
+    osDelay(10);
 	  
   }
   /* USER CODE END Robot_TASK */

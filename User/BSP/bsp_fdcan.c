@@ -193,24 +193,33 @@ void Motor_MIT_MODE(FDCAN_HandleTypeDef *hcan, uint16_t id)
 * @details:    	接收数据
 ************************************************************************
 **/
+uint32_t rx1free_level;
 uint8_t fdcan1_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 {	
 	FDCAN_RxHeaderTypeDef pRxHeader;
 	uint8_t len = 0;
-	
-	if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &pRxHeader, buf) == HAL_OK)
-	{
-		// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
-		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
-		
-		// 经典CAN模式下，数据长度直接就是字节数
-		len = pRxHeader.DataLength >> 16;
-		if(len > 8) {
-			len = 8; // 确保不超过8字节
+	rx1free_level = HAL_FDCAN_GetRxFifoFillLevel(&hfdcan1, FDCAN_CFG_RX_FIFO0);
+if (rx1free_level > 0) {
+    // FIFO 还有 free_level 个空闲槽位，可以安全接收新报文
+    // 例如，可以继续使能接收中断，或者不做特殊处理
+} else {
+    // FIFO 已满！新报文将会溢出
+    // 可以采取紧急措施：提高读取频率、丢弃某些低优先级报文、或记录错误
+    // 例如：暂时关闭接收中断，强制读取所有报文后再恢复
+}
+		if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &pRxHeader, buf) == HAL_OK)
+		{
+			// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
+			*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
+			
+			// 经典CAN模式下，数据长度直接就是字节数
+			len = pRxHeader.DataLength >> 16;
+			if(len > 8) {
+				len = 8; // 确保不超过8字节
+			}
+			
+			return len; // 返回数据长度
 		}
-		
-		return len; // 返回数据长度
-	}
 	return 0;	
 }
 
@@ -250,6 +259,7 @@ uint8_t fdcan2_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 * @details:    	发送CAN命令（适配原有ZDT协议）
 ************************************************************************
 **/
+uint32_t free_level;
 void can_SendCmd(uint8_t *cmd, uint32_t len)
 {
     uint8_t i = 0, j = 0, k = 0, l = 0, packNum = 0;
@@ -298,11 +308,20 @@ void can_SendCmd(uint8_t *cmd, uint32_t len)
         pTxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
         pTxHeader.MessageMarker = 0;
 
-        // 发送数据
-        if(HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &pTxHeader, send_buffer) != HAL_OK)
-		{
-			can_error_status = CAN_ERROR_SEND;
+		
+		free_level = HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan1);
+		if (free_level > 0) {
+			// 至少有一个空闲槽位，可以添加报文
+			// 发送数据
+			if(HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &pTxHeader, send_buffer) != HAL_OK)
+			{
+				can_error_status = CAN_ERROR_SEND;
+			}
+		} else {
+			// FIFO 已满，稍后重试或丢弃
+			// 可记录错误或触发重传机制
 		}
+        
         
         // 记录发送的包序号
         packNum++;
