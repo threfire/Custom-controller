@@ -3,7 +3,7 @@
 <title>Static Call Graph - [CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Fri Mar 06 22:58:54 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Tue Mar 10 23:40:57 2026
 <BR><P>
 <H3>Maximum Stack Usage =       1100 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -1845,7 +1845,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32h723xx.o(RESET)
 </UL>
-<P><STRONG><a name="[143]"></a>Read_zdt_Pos</STRONG> (Thumb, 58 bytes, Stack size 8 bytes, servo_mapping.o(i.Read_zdt_Pos))
+<P><STRONG><a name="[143]"></a>Read_zdt_Pos</STRONG> (Thumb, 66 bytes, Stack size 8 bytes, servo_mapping.o(i.Read_zdt_Pos))
 <BR><BR>[Stack]<UL><LI>Max Depth = 1100<LI>Call Chain = Read_zdt_Pos &rArr; gravity_compensation &rArr; compute_transforms &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[147]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;gravity_compensation
@@ -1858,7 +1858,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[a2]"></a>Robot_TASK</STRONG> (Thumb, 22 bytes, Stack size 0 bytes, freertos.o(i.Robot_TASK))
-<BR><BR>[Stack]<UL><LI>Max Depth = 204<LI>Call Chain = Robot_TASK &rArr; Set_Taget_Torque &rArr; ZDT_X42_V2_Torque_Control &rArr; can_SendCmd &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
+<BR><BR>[Stack]<UL><LI>Max Depth = 212<LI>Call Chain = Robot_TASK &rArr; Set_Taget_Torque &rArr; ZDT_X42_V2_Torque_Control &rArr; can_SendCmd &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[131]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
 <LI><a href="#[148]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;motor_mapping_init
@@ -1898,8 +1898,8 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.constdata)
 </UL>
-<P><STRONG><a name="[149]"></a>Set_Taget_Torque</STRONG> (Thumb, 104 bytes, Stack size 24 bytes, servo_mapping.o(i.Set_Taget_Torque))
-<BR><BR>[Stack]<UL><LI>Max Depth = 204<LI>Call Chain = Set_Taget_Torque &rArr; ZDT_X42_V2_Torque_Control &rArr; can_SendCmd &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
+<P><STRONG><a name="[149]"></a>Set_Taget_Torque</STRONG> (Thumb, 126 bytes, Stack size 32 bytes, servo_mapping.o(i.Set_Taget_Torque))
+<BR><BR>[Stack]<UL><LI>Max Depth = 212<LI>Call Chain = Set_Taget_Torque &rArr; ZDT_X42_V2_Torque_Control &rArr; can_SendCmd &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[14f]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ZDT_X42_V2_Torque_Control
 <LI><a href="#[c4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;CAN_cmd_MIT
