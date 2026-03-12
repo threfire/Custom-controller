@@ -141,7 +141,8 @@ void LedTask(void const * argument)
   {
 	  ws2812_task();
 	  Get_Keynum();
-    osDelay(1);
+	  CustomController_StructSend(&MoterMap);
+    osDelay(33);
 	  
   }
   /* USER CODE END LedTask */
@@ -160,16 +161,10 @@ void Servo_TASK(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  #if controller_mode == servo_controller
-	  Servo_Task();
-	  #endif
-	  #if controller_mode == zdt_controller
-	  Read_zdt_Pos();
-	  TaskFrequencycount(GETTASK);
-	  #endif
+	  
+	Servo_Task();
 	osDelay(3);
-	
-
+	  
   }
   /* USER CODE END Servo_TASK */
 }
@@ -188,14 +183,9 @@ void Robot_TASK(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  #if controller_mode == servo_controller
-	  Robot_Task();
-	  #endif
-	  
-	  #if controller_mode == zdt_controller
-	  Set_Taget_Torque();
-	  #endif
-	  TaskFrequencycount(SENDTASK);
+
+	Robot_Task();
+	TaskFrequencycount(SENDTASK);
     osDelay(10);
 	  
   }

@@ -42,6 +42,6 @@ ctrlboard-h7_ws1812\zdt_x42_v2.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_
 ctrlboard-h7_ws1812\zdt_x42_v2.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\zdt_x42_v2.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\zdt_x42_v2.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\zdt_x42_v2.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\zdt_x42_v2.o: ../User/BSP/bsp_fdcan.h
 ctrlboard-h7_ws1812\zdt_x42_v2.o: ../Core/Inc/fdcan.h
-ctrlboard-h7_ws1812\zdt_x42_v2.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

@@ -41,4 +41,5 @@ ctrlboard-h7_ws1812\stm32h7xx_it.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7x
 ctrlboard-h7_ws1812\stm32h7xx_it.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\stm32h7xx_it.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\stm32h7xx_it.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\stm32h7xx_it.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\stm32h7xx_it.o: ../Core/Inc/stm32h7xx_it.h

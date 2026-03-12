@@ -42,6 +42,7 @@ ctrlboard-h7_ws1812\servo_mapping.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7
 ctrlboard-h7_ws1812\servo_mapping.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\servo_mapping.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\servo_mapping.o: ..\User\APP\crc.h
 ctrlboard-h7_ws1812\servo_mapping.o: D:\Keil5\ARM\ARMCC\Bin\..\include\string.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.h
@@ -61,5 +62,5 @@ ctrlboard-h7_ws1812\servo_mapping.o: ../Middlewares/Third_Party/FreeRTOS/Source/
 ctrlboard-h7_ws1812\servo_mapping.o: ../User/Devices/ZDT/ZDT_X42_V2.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../User/BSP/bsp_fdcan.h
 ctrlboard-h7_ws1812\servo_mapping.o: ../Core/Inc/fdcan.h
-ctrlboard-h7_ws1812\servo_mapping.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\servo_mapping.o: ..\User\APP\Gravity_comp.h
+ctrlboard-h7_ws1812\servo_mapping.o: ..\User\APP\joint_impedance.h

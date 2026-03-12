@@ -41,6 +41,7 @@ ctrlboard-h7_ws1812\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_ua
 ctrlboard-h7_ws1812\main.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\main.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\main.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\main.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.h
 ctrlboard-h7_ws1812\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h
 ctrlboard-h7_ws1812\main.o: ../Core/Inc/FreeRTOSConfig.h
@@ -65,4 +66,3 @@ ctrlboard-h7_ws1812\main.o: ../User/Devices/WS2812/ws2812.h
 ctrlboard-h7_ws1812\main.o: ../User/APP/servo_mapping.h
 ctrlboard-h7_ws1812\main.o: ../User/Devices/ZDT/ZDT_X42_V2.h
 ctrlboard-h7_ws1812\main.o: ../User/BSP/bsp_fdcan.h
-ctrlboard-h7_ws1812\main.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

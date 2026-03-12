@@ -3,25 +3,27 @@
 
 #include "main.h"
 
-#define servo_controller 0
-#define zdt_controller 1
-/* =================两个自控选择 ================= */
-#define controller_mode zdt_controller
+/* ================= 控制器模式选择 ================= */
+#define CONTROLLER_MODE_SERVO   0   // 普通舵机模式
+#define CONTROLLER_MODE_ZDT     1   // ZDT电机模式
 
+/* 当前使用的控制器模式（可根据编译选项修改） */
+#define CONTROLLER_MODE  CONTROLLER_MODE_ZDT
+
+/* ================= 任务编号定义 ================= */
 #define TASKNUM 3
 #define NORMALTASK 0
 #define GETTASK 1
 #define SENDTASK 2
 
+/* ================= 硬件相关参数 ================= */
 #define SERVO_RX_BUF_NUM 10
 #define SERVO_POS_READ 0X1C	//28
-							//参数 1 ：舵机当前角度位置值的低八位。
-							//参数 2 ：舵机当前角度位置值的高八位，无默认值。
-							//说明：返回的角度位置值要转换成 signed short int 型数据，因为读出的角度可能为负值
 #define SERVO_LOAD_OR_UNLOAD_WRITE 0X1F	//31参数 1 ：舵机内部电机是否卸载掉电，范围0 或 1 ，0 代表卸载掉电，此时舵机 无力矩输出。1 代表装载电机，此时舵机有力矩输出，默认值 0。
 
-#define SERVOS_NUM 0X06
-#define MOTORS_NUM 6
+#define SERVOS_NUM 6		// 舵机总数
+#define MOTORS_NUM 6		// 电机总数
+
 #define JUDGE_MAX_TX_LENGTH 40
 #define PI 3.1415926f
 /*
@@ -60,13 +62,15 @@
 #define J2_KD 0.5f
 
 #define LIMIT(x,min,max) (x)=(((x)<=(min))?(min):(((x)>=(max))?(max):(x)))
+#define htons(x) ((uint16_t)(((x) >> 8) | (((x) & 0xFF) << 8)))
 
 #define ENABLE_KEY 0X01
 #define ACTUATOR_KEY 0X02
 
-uint8_t handleButtonPress(uint8_t KEY);
-
-/* 电机电流信息结构体 */
+/* ================= 数据结构定义 ================= */
+/**
+ * @brief 电机电流及状态信息（用于ZDT电机）
+ */
 typedef struct {
     uint8_t id;                 // 电机ID (1~6)
     int16_t target_current;     // 目标电流值
@@ -77,15 +81,15 @@ typedef struct {
     uint8_t enabled;            // 使能状态
     float position;             // 当前角度位置 (度)
 	uint8_t dir;
+	float dq;              // 当前关节速度（单位：rad/s）
+    float theta_prev;      // 上一时刻的关节位置（单位：°）
+    uint32_t timestamp;    // 数据更新时间戳
+    uint8_t valid;         // 数据是否有效
 } MotorCurrentInfo;
 
-typedef struct 
-{
-	uint16_t	Frequency[TASKNUM];
-	uint16_t	lastFrequency[TASKNUM];
-	uint16_t 	timtick[TASKNUM];
-}FrequencyCheck;
-
+/**
+ * @brief 舵机数据结构
+ */
 typedef struct 
 {
     uint8_t id;       //舵机id
@@ -94,6 +98,9 @@ typedef struct
 	uint16_t lastFilteredAngle;
 }Servo;
 
+/**
+ * @brief 舵机映射模块内部状态
+ */
 typedef struct 
 {
     struct 
@@ -111,6 +118,9 @@ typedef struct
     }ZX_Data;
 }servoMapping;
 
+/**
+ * @brief 电机映射数据（发送给上位机）
+ */
 typedef __packed struct 
 {   
     uint8_t online;     //使能
@@ -121,8 +131,12 @@ typedef __packed struct
     float j2;        //PITCH电机
     float j1;         //ROLL电机
     float j0;           //YAW电机
-}moterMapHeader;               //电机映射数据		26字节
+	uint8_t res[4];
+}moterMapHeader;               //电机映射数据		30字节
 
+/**
+ * @brief 自定义控制器通信帧头
+ */
 typedef __packed struct 
 {
     uint8_t     SOF;
@@ -131,13 +145,16 @@ typedef __packed struct
     uint8_t     CRC8;
 }xFrameHeader;              //帧头结构体		5字节
 
+/**
+ * @brief 自定义控制器完整发送帧
+ */
 typedef __packed struct
 {
     xFrameHeader                    txFrameHeader;  //帧头			5字节
     uint16_t                        CmdID;          //命令码			2字节
-    moterMapHeader                  moterMap;       //电机映射数据段	26字节
+    moterMapHeader                  moterMap;       //电机映射数据段	30字节
     uint16_t                        FrameTail;      //CRC16 			2字节
-}customController_t;		//											35字节
+}customController_t;		//											39字节
 
 typedef struct
 {
@@ -145,7 +162,17 @@ typedef struct
     uint16_t frameLength;
 }JudgeTxFrame;
 
+/**
+ * @brief 任务频率检测结构体
+ */
+typedef struct 
+{
+	uint16_t	Frequency[TASKNUM];
+	uint16_t	lastFrequency[TASKNUM];
+	uint16_t 	timtick[TASKNUM];
+}FrequencyCheck;
 
+/* ================= 全局变量声明 ================= */
 extern Servo            				Servos[SERVOS_NUM];
 extern servoMapping     				ServoMap;
 extern moterMapHeader          	    	MoterMap;
@@ -153,23 +180,30 @@ extern FrequencyCheck		   			taskFrequencyCheck;
 /* 声明全局电机电流数组 */
 extern MotorCurrentInfo MotorCurrents[MOTORS_NUM];
 
-void TaskFrequencyCheck(uint8_t tasknum);
-void TaskFrequencycount(uint8_t tasknum);
+/* ================= 函数声明 ================= */
+/* 通用接口 */
 void Servo_Mapping_Init(void);
 void CustomController_StructSend(moterMapHeader *data);
 void CustomController_AngleMapping(void);
-void FillServoPacket_POS(uint8_t id, uint8_t* packet);
-void FillServoPacket_LOAD(uint8_t id, uint8_t* packet);
-void buzzer_on(uint16_t psc, uint16_t pwm);
-void buzzer_off(void);
+
 void Servo_Task(void);
 void Robot_Task(void);
 void Get_Keynum(void);
+/* 任务频率检测 */
+void TaskFrequencyCheck(uint8_t tasknum);
+void TaskFrequencycount(uint8_t tasknum);
+
+/* 舵机通信包构建 */
+void FillServoPacket_POS(uint8_t id, uint8_t* packet);
+void FillServoPacket_LOAD(uint8_t id, uint8_t* packet);
+
+/* ZDT电机相关 */
 void motor_mapping_init(void);
 void Read_zdt_Pos(void);
 void Set_Taget_Torque(void);
-void Get_theta(MotorCurrentInfo *motor_currents);
+void Get_theta(MotorCurrentInfo *motor_currents, uint8_t id);
 void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len);
-void SendParam_Count(uint16_t* send_tauqe, float * tauqe);
+void calc_send_torque(uint16_t* send_tauqe, float * tauqe);
 uint16_t Limite_tauqe(uint16_t send_tauqe, uint16_t max, uint16_t min);
-#endif
+
+#endif /* __SERVO_MAPPING_H__ */

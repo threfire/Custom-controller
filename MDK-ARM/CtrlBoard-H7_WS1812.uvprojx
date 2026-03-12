@@ -1540,11 +1540,6 @@
               <FilePath>..\User\APP\servo_mapping.c</FilePath>
             </File>
             <File>
-              <FileName>usart_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\User\APP\usart_manager.c</FilePath>
-            </File>
-            <File>
               <FileName>userkey.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\APP\userkey.c</FilePath>
@@ -1558,6 +1553,11 @@
               <FileName>Gravity_comp.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\APP\Gravity_comp.c</FilePath>
+            </File>
+            <File>
+              <FileName>joint_impedance.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\APP\joint_impedance.c</FilePath>
             </File>
           </Files>
         </Group>

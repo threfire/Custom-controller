@@ -41,3 +41,4 @@ ctrlboard-h7_ws1812\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_t
 ctrlboard-h7_ws1812\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
 ctrlboard-h7_ws1812\usart.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\usart.o: ../Core/Inc/usart.h
+ctrlboard-h7_ws1812\usart.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h

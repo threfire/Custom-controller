@@ -42,4 +42,5 @@ ctrlboard-h7_ws1812\safewarning.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx
 ctrlboard-h7_ws1812\safewarning.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\safewarning.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\safewarning.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\safewarning.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\safewarning.o: ../User/Devices/WS2812/ws2812.h

@@ -50,6 +50,7 @@ ctrlboard-h7_ws1812\freertos.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_ha
 ctrlboard-h7_ws1812\freertos.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
 ctrlboard-h7_ws1812\freertos.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\freertos.o: ../Core/Inc/main.h
+ctrlboard-h7_ws1812\freertos.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.h
 ctrlboard-h7_ws1812\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h
 ctrlboard-h7_ws1812\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h
@@ -59,5 +60,4 @@ ctrlboard-h7_ws1812\freertos.o: ../User/APP/safewarning.h
 ctrlboard-h7_ws1812\freertos.o: ../User/APP/servo_mapping.h
 ctrlboard-h7_ws1812\freertos.o: ../User/BSP/bsp_fdcan.h
 ctrlboard-h7_ws1812\freertos.o: ../Core/Inc/fdcan.h
-ctrlboard-h7_ws1812\freertos.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
 ctrlboard-h7_ws1812\freertos.o: ../User/APP/userkey.h

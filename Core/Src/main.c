@@ -206,19 +206,19 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
 	if(huart->Instance == UART7){
 		if (Size <= SERVO_RX_BUF_NUM)
 		{
-			if(uart7_rebuffer[0] == 0x55 && uart7_rebuffer[1] == 0x55 && uart7_rebuffer[3] == 0x05 && uart7_rebuffer[4] == SERVO_POS_READ)	//���֡��ʽ��ȷ
+			if(uart7_rebuffer[0] == 0x55 && uart7_rebuffer[1] == 0x55 && uart7_rebuffer[3] == 0x05 && uart7_rebuffer[4] == SERVO_POS_READ)	//
 				{
-					uint8_t id = uart7_rebuffer[2];		//��ȡid
-					int16_t position = (int16_t)((uart7_rebuffer[6] << 8) | uart7_rebuffer[5]);		//��ȡλ��
+					uint8_t id = uart7_rebuffer[2];		//
+					int16_t position = (int16_t)((uart7_rebuffer[6] << 8) | uart7_rebuffer[5]);		//
 					
-					Servos[id].cnt = 0;		// ���ó�ʱ������
-					Servos[id].id = id;		//��ȡid
-					Servos[id].angle = position;	//��ȡλ��
+					Servos[id].cnt = 0;		// 
+					Servos[id].id = id;		//
+					Servos[id].angle = position;	//
 				}
-			HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2); // ������Ϻ�����
+			HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2); // 
 			for(uint8_t i =0;i<10;i++){
 				miro_uart7_rebuffer[i] = uart7_rebuffer[i];}
-//			memset(uart7_rebuffer, 0, sizeof(uart7_rebuffer));		// ������ջ���
+//			memset(uart7_rebuffer, 0, sizeof(uart7_rebuffer));		// 
 		}
 		TaskFrequencycount(GETTASK);
 	}
@@ -231,13 +231,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef * huart)
 {
 	if(huart->Instance == UART7)
 	{
-		HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)); // ���շ������������
-		memset(uart7_rebuffer, 0, sizeof(uart7_rebuffer));							   // ������ջ���		
+		HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)); // 
+		memset(uart7_rebuffer, 0, sizeof(uart7_rebuffer));							   // 		
 	}
 	if(huart->Instance == USART1)
 	{
-		HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)); // ���շ������������
-		memset(uart1_rebuffer, 0, sizeof(uart1_rebuffer));							   // ������ջ���		
+		HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)); // 
+		memset(uart1_rebuffer, 0, sizeof(uart1_rebuffer));							   // 		
 	}
 }
 /* USER CODE END 4 */
