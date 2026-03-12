@@ -10,6 +10,9 @@
 /* 当前使用的控制器模式（可根据编译选项修改） */
 #define CONTROLLER_MODE  CONTROLLER_MODE_ZDT
 
+#define ROBOT_TASK_PERIOD_MS   10      // 任务周期 10ms
+#define ROBOT_TASK_PERIOD_S    0.01f   // 对应的秒数
+
 /* ================= 任务编号定义 ================= */
 #define TASKNUM 3
 #define NORMALTASK 0

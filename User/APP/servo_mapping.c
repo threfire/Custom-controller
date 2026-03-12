@@ -536,11 +536,6 @@ void Servo_Task(void)
 
 void Robot_Task(void)
 {
-	static TickType_t xLastWakeTime = 0;
-    const TickType_t xPeriod = pdMS_TO_TICKS(10);  // 每 10ms 执行一次，100Hz
-
-    // 保证任务周期稳定
-    vTaskDelayUntil(&xLastWakeTime, xPeriod);
 
     // 计算每个关节的角速度
     for (uint8_t i = 0; i < JOINT_NUM; i++)
@@ -548,7 +543,7 @@ void Robot_Task(void)
         // 获取最新的关节角度
         float theta_now = theta[i];
         // 基于差分法计算角速度
-        float dq = (theta_now - MotorCurrents[i].theta_prev) / (xPeriod * 1e-3f);  // xPeriod为任务周期
+        float dq = (theta_now - MotorCurrents[i].theta_prev) / (ROBOT_TASK_PERIOD_S);  // xPeriod为任务周期
 
         // 更新上次的关节角度
         MotorCurrents[i].theta_prev = theta_now;
@@ -557,11 +552,11 @@ void Robot_Task(void)
         MotorCurrents[i].dq = dq;
     }
 	// 计算并发送力矩指令
-    Update_All_Joint_Impedance(xPeriod * 1e-3f);  // 将周期转换为秒
+    Update_All_Joint_Impedance(ROBOT_TASK_PERIOD_S);  // 将周期转换为秒
 	// 计算发送力矩值
 	calc_send_torque(send_tau,tau);
 	//发送力矩
-//	Set_Taget_Torque();
+	Set_Taget_Torque();
 	//计算帧率
 	TaskFrequencycount(SENDTASK);
 }

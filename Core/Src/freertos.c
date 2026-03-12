@@ -180,13 +180,17 @@ void Robot_TASK(void const * argument)
 {
   /* USER CODE BEGIN Robot_TASK */
 	motor_mapping_init();
+	static TickType_t xLastWakeTime = 0;
+    const TickType_t xPeriod = pdMS_TO_TICKS(ROBOT_TASK_PERIOD_MS);  // 每 10ms 执行一次，100Hz
+
   /* Infinite loop */
   for(;;)
   {
 
 	Robot_Task();
 	TaskFrequencycount(SENDTASK);
-    osDelay(10);
+    // 保证任务周期稳定
+    vTaskDelayUntil(&xLastWakeTime, xPeriod);
 	  
   }
   /* USER CODE END Robot_TASK */
