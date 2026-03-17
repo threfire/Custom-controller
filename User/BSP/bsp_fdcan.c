@@ -224,30 +224,45 @@ if (rx1free_level > 0) {
 }
 
 uint8_t fdcan2_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
-{	
-	FDCAN_RxHeaderTypeDef pRxHeader;
-	uint8_t len = 0;
-	
-	if(HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &pRxHeader, buf) == HAL_OK)
-	{
-		// 提取扩展ID的高16位作为接收ID（保持与原有代码兼容）
-		*rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
-		
-		MITFdbData(&MIT_MOTOR_MEASURE, buf); 
-		MotorCurrents[1].position = MIT_MOTOR_MEASURE.pos;
-		if(MotorCurrents[1].position >= 0)
-			MotorCurrents[1].dir = 0;
-		else
-			MotorCurrents[1].dir = 1;
-		// 经典CAN模式下，数据长度直接就是字节数
-		len = pRxHeader.DataLength >> 16;
-		if(len > 8) {
-			len = 8; // 确保不超过8字节
-		}
-		
-		return len; // 返回数据长度
-	}
-	return 0;	
+{   
+    FDCAN_RxHeaderTypeDef pRxHeader;
+    uint8_t len = 0;
+    
+    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &pRxHeader, buf) == HAL_OK)
+    {
+        // 获取数据长度（经典CAN模式长度位于高16位）
+        len = pRxHeader.DataLength >> 16;
+        if (len > 8) len = 8;
+
+        // 为了兼容原有代码，仍将右移8位后的值赋给 rec_id
+        *rec_id = (uint16_t)(pRxHeader.Identifier >> 8);
+
+        // 提取真实的电机 ID
+        uint8_t motor_id;
+        if (pRxHeader.IdType == FDCAN_STANDARD_ID) {
+            motor_id = (uint8_t)pRxHeader.Identifier;          // 标准ID，电机ID在低8位
+        } else {
+            motor_id = (uint8_t)(pRxHeader.Identifier >> 8);   // 扩展ID，电机ID在高8位
+        }
+
+        // 根据电机 ID 分流处理
+        if (motor_id == 0x0D) {
+            // MIT 电机反馈（ID=0D）
+            MITFdbData(&MIT_MOTOR_MEASURE, buf); 
+            MotorCurrents[1].position = MIT_MOTOR_MEASURE.pos;
+            Get_theta(MotorCurrents, 1);
+            // 更新方向（与原逻辑保持一致）
+            MotorCurrents[1].dir = (MotorCurrents[1].position >= 0) ? 0 : 1;
+        }
+        else if (motor_id == 0x01 || motor_id == 0x03) {
+            // ZDT 电机反馈（ID=1 或 3）
+            process_zdt_can_frame(motor_id, buf, len);
+        }
+        // 如有其他 ID 可继续添加分支
+
+        return len;
+    }
+    return 0;   
 }
 
 /**
@@ -260,6 +275,85 @@ uint8_t fdcan2_receive(hcan_t *hfdcan, uint16_t *rec_id, uint8_t *buf)
 ************************************************************************
 **/
 uint32_t free_level;
+void USER_can_SendCmd(FDCAN_HandleTypeDef *hfdcan, uint8_t *cmd, uint32_t len)
+{
+    uint8_t i = 0, j = 0, k = 0, l = 0, packNum = 0;
+    uint8_t send_buffer[8] = {0};
+    FDCAN_TxHeaderTypeDef pTxHeader;
+
+    // 去除ID地址和功能码后的数据长度
+    j = len - 2;
+
+    // 分包发送
+    while(i < j)
+    {
+        // 剩余数据长度
+        k = j - i;
+
+        // 配置发送头
+        pTxHeader.Identifier = ((uint32_t)cmd[0] << 8) | (uint32_t)packNum; // 扩展ID格式
+        pTxHeader.IdType = FDCAN_EXTENDED_ID; // 使用扩展ID
+        pTxHeader.TxFrameType = FDCAN_DATA_FRAME;
+        
+        // 第一个字节是功能码
+        send_buffer[0] = cmd[1];
+        
+        // 小于8字节数据
+        if(k < 8)
+        {
+            for(l = 0; l < k; l++, i++) 
+            { 
+                send_buffer[l + 1] = cmd[i + 2]; 
+            }
+            pTxHeader.DataLength = (k + 1) << 16; // 数据长度
+        }
+        // 大于等于8字节数据，分包发送，每包最多7个数据字节
+        else
+        {
+            for(l = 0; l < 7; l++, i++) 
+            { 
+                send_buffer[l + 1] = cmd[i + 2]; 
+            }
+            pTxHeader.DataLength = 8 << 16; // 固定8字节
+        }
+        
+        pTxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+        pTxHeader.BitRateSwitch = FDCAN_BRS_OFF; // 经典CAN模式关闭比特率切换
+        pTxHeader.FDFormat = FDCAN_CLASSIC_CAN;   // 经典CAN帧格式
+        pTxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+        pTxHeader.MessageMarker = 0;
+
+		
+		free_level = HAL_FDCAN_GetTxFifoFreeLevel(hfdcan);
+		if (free_level > 0) {
+			// 至少有一个空闲槽位，可以添加报文
+			// 发送数据
+			if(HAL_FDCAN_AddMessageToTxFifoQ(hfdcan, &pTxHeader, send_buffer) != HAL_OK)
+			{
+				can_error_status = CAN_ERROR_SEND;
+			}
+		} else {
+			// FIFO 已满，稍后重试或丢弃
+			// 可记录错误或触发重传机制
+		}
+        
+        
+        // 记录发送的包序号
+        packNum++;
+        
+        // 清空发送缓冲区
+        memset(send_buffer, 0, sizeof(send_buffer));
+    }
+}
+/**
+************************************************************************
+* @brief:      	can_SendCmd
+* @param:       cmd：命令数据
+* @param:       len：数据长度
+* @retval:     	void
+* @details:    	发送CAN命令（适配原有ZDT协议）
+************************************************************************
+**/
 void can_SendCmd(uint8_t *cmd, uint32_t len)
 {
     uint8_t i = 0, j = 0, k = 0, l = 0, packNum = 0;
@@ -330,7 +424,6 @@ void can_SendCmd(uint8_t *cmd, uint32_t len)
         memset(send_buffer, 0, sizeof(send_buffer));
     }
 }
-
 void fdcan1_rx_callback(void)
 {
 	len1 = fdcan1_receive(&hfdcan1, &rec_id1, rx_data1);  // 获取实际数据长度

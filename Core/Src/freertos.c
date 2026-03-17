@@ -53,6 +53,7 @@
 osThreadId LED_TaskHandle;
 osThreadId SERVO_TASKHandle;
 osThreadId ROBOT_TASKHandle;
+osThreadId MAPDATASEND_TASHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -62,6 +63,7 @@ osThreadId ROBOT_TASKHandle;
 void LedTask(void const * argument);
 void Servo_TASK(void const * argument);
 void Robot_TASK(void const * argument);
+void MapDataSend_task(void const * argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -120,6 +122,10 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(ROBOT_TASK, Robot_TASK, osPriorityHigh, 0, 1024);
   ROBOT_TASKHandle = osThreadCreate(osThread(ROBOT_TASK), NULL);
 
+  /* definition and creation of MAPDATASEND_TAS */
+  osThreadDef(MAPDATASEND_TAS, MapDataSend_task, osPriorityNormal, 0, 128);
+  MAPDATASEND_TASHandle = osThreadCreate(osThread(MAPDATASEND_TAS), NULL);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -139,10 +145,9 @@ void LedTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  ws2812_task();
-	  Get_Keynum();
-	  CustomController_StructSend(&MoterMap);
-    osDelay(33);
+	ws2812_task();
+	Key_Beep_Handler();
+    osDelay(1);
 	  
   }
   /* USER CODE END LedTask */
@@ -163,6 +168,7 @@ void Servo_TASK(void const * argument)
   {
 	  
 	Servo_Task();
+	TaskFrequencycount(GETTASK);
 	osDelay(3);
 	  
   }
@@ -181,7 +187,7 @@ void Robot_TASK(void const * argument)
   /* USER CODE BEGIN Robot_TASK */
 	motor_mapping_init();
 	static TickType_t xLastWakeTime = 0;
-    const TickType_t xPeriod = pdMS_TO_TICKS(ROBOT_TASK_PERIOD_MS);  // Ã¿ 10ms Ö´ÐÐÒ»´Î£¬100Hz
+    const TickType_t xPeriod = pdMS_TO_TICKS(ROBOT_TASK_PERIOD_MS);  // Ã¿ 10ms Ö´ï¿½ï¿½Ò»ï¿½Î£ï¿½100Hz
 
   /* Infinite loop */
   for(;;)
@@ -189,11 +195,30 @@ void Robot_TASK(void const * argument)
 
 	Robot_Task();
 	TaskFrequencycount(SENDTASK);
-    // ±£Ö¤ÈÎÎñÖÜÆÚÎÈ¶¨
+    // ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¶ï¿½
     vTaskDelayUntil(&xLastWakeTime, xPeriod);
 	  
   }
   /* USER CODE END Robot_TASK */
+}
+
+/* USER CODE BEGIN Header_MapDataSend_task */
+/**
+* @brief Function implementing the MAPDATASEND_TAS thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_MapDataSend_task */
+void MapDataSend_task(void const * argument)
+{
+  /* USER CODE BEGIN MapDataSend_task */
+  /* Infinite loop */
+  for(;;)
+  {
+	CustomController_StructSend(&MoterMap);
+    osDelay(10);
+  }
+  /* USER CODE END MapDataSend_task */
 }
 
 /* Private application code --------------------------------------------------*/

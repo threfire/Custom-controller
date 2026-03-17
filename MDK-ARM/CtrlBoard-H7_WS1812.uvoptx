@@ -203,7 +203,7 @@
         <Ww>
           <count>8</count>
           <WinNumber>1</WinNumber>
-          <ItemText>key_lev,0x0A</ItemText>
+          <ItemText>Key_Num,0x0A</ItemText>
         </Ww>
         <Ww>
           <count>9</count>
@@ -289,6 +289,26 @@
           <count>25</count>
           <WinNumber>1</WinNumber>
           <ItemText>txFrame,0x10</ItemText>
+        </Ww>
+        <Ww>
+          <count>26</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>g_tau_cmd,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>27</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>g_joint_imp,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>28</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>CurrState,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>29</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>key_lev,0x0A</ItemText>
         </Ww>
       </WatchWindow1>
       <WatchWindow2>
@@ -1053,8 +1073,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\User\APP\Gravity_comp.c</PathWithFileName>
-      <FilenameWithoutPath>Gravity_comp.c</FilenameWithoutPath>
+      <PathWithFileName>..\User\APP\joint_impedance.c</PathWithFileName>
+      <FilenameWithoutPath>joint_impedance.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1065,8 +1085,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\User\APP\joint_impedance.c</PathWithFileName>
-      <FilenameWithoutPath>joint_impedance.c</FilenameWithoutPath>
+      <PathWithFileName>..\User\APP\Gravity_comp.c</PathWithFileName>
+      <FilenameWithoutPath>Gravity_comp.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

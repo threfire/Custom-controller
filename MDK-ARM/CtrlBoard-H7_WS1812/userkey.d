@@ -43,3 +43,5 @@ ctrlboard-h7_ws1812\userkey.o: ../Core/Inc/main.h
 ctrlboard-h7_ws1812\userkey.o: ../Core/Inc/usart.h
 ctrlboard-h7_ws1812\userkey.o: ../Core/Inc/main.h
 ctrlboard-h7_ws1812\userkey.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stdbool.h
+ctrlboard-h7_ws1812\userkey.o: ..\User\APP\safewarning.h
+ctrlboard-h7_ws1812\userkey.o: ..\User\APP\servo_mapping.h

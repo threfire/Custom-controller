@@ -8,14 +8,14 @@
 #include "joint_impedance.h"
 
 /* ================= 常量定义 ================= */
-#define debug 1
+#define debug 0
 // 不同关节的力矩转换系数
-#define TAU_MAP_PARAM1 0
-#define TAU_MAP_PARAM2 10.0f
-#define TAU_MAP_PARAM3 4200
+#define TAU_MAP_PARAM1 1000
+#define TAU_MAP_PARAM2 8.5f
+#define TAU_MAP_PARAM3 6000
 #define TAU_MAP_PARAM4 9000
-#define TAU_MAP_PARAM5 10000
-#define TAU_MAP_PARAM6 20000
+#define TAU_MAP_PARAM5 13600
+#define TAU_MAP_PARAM6 26000
 
 // 滤波系数
 #define FILTER_ALPHA           0.2f
@@ -28,11 +28,11 @@
 /* ================= 静态变量 ================= */
 static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum 机位置查询帧缓冲区
 static uint8_t load_txbuf[7];  // 55 55 id 03 28 checksum 舵机加载/卸载帧缓冲区
-static uint16_t send_tau[6];
-static float send_tau_mit;
+uint16_t send_tau[6];
+float send_tau_mit;
 
-static JointImpController_t g_joint_imp[JOINT_NUM];
-static float g_tau_cmd[JOINT_NUM];      /* 最终关节力矩命令 = 重力补偿 + 阻抗/阻尼 + 其他前馈 */
+JointImpController_t g_joint_imp[JOINT_NUM];
+float g_tau_cmd[JOINT_NUM];      /* 最终关节力矩命令 = 重力补偿 + 阻抗/阻尼 + 其他前馈 */
 
 // JustFloat 格式发送帧
 typedef struct Frame {
@@ -48,7 +48,7 @@ static const float g_kp_init[JOINT_NUM] = {
     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 static const float g_kd_init[JOINT_NUM] = {
-    0.03f, 0.05f, 0.08f, 0.06f, 0.04f, 0.03f
+    0.1f, 0.05f, 0.07f, 0.03f, 0.015f, 0.002f
 };
 static const float g_torque_limit_init[JOINT_NUM] = {
     1.0f, 1.2f, 1.5f, 1.0f, 0.8f, 0.6f
@@ -85,7 +85,7 @@ MotorCurrentInfo MotorCurrents[SERVOS_NUM];
 // 外部变量
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 extern MITMeasure_t MIT_MOTOR_MEASURE;
-
+extern uint8_t datapack_ordorcount;
 /* ================= 静态函数声明 ================= */
 static void JustFloat_send(moterMapHeader *MoterMap);
 
@@ -99,19 +99,18 @@ uint16_t lowV(Servo* servo, uint16_t currentAngle) {
 }
 
 /* ================= 任务频率检测 ================= */
-void TaskFrequencyCheck(uint8_t tasknum)
-{
-	taskFrequencyCheck.timtick[tasknum] ++;
-	if(taskFrequencyCheck.timtick[tasknum] >999)
-	{
-		taskFrequencyCheck.timtick[tasknum] = 0;
-		taskFrequencyCheck.Frequency[tasknum] = 0;
-	}
+void TaskFrequencyCheck(uint8_t tasknum) {
+    taskFrequencyCheck.timtick[tasknum]++;
+    if (taskFrequencyCheck.timtick[tasknum] > 999) {   // 1ms 中断，1000 次 = 1秒
+        taskFrequencyCheck.timtick[tasknum] = 0;
+        // 保存上一秒的频率值
+        taskFrequencyCheck.lastFrequency[tasknum] = taskFrequencyCheck.Frequency[tasknum];
+        taskFrequencyCheck.Frequency[tasknum] = 0;
+    }
 }
-void TaskFrequencycount(uint8_t tasknum)
-{
-	if(taskFrequencyCheck.lastFrequency[tasknum]<= taskFrequencyCheck.Frequency[tasknum]) taskFrequencyCheck.lastFrequency[tasknum] = taskFrequencyCheck.Frequency[tasknum];
-	taskFrequencyCheck.Frequency[tasknum] ++;
+
+void TaskFrequencycount(uint8_t tasknum) {
+    taskFrequencyCheck.Frequency[tasknum]++;
 }
 /* ================= 舵机通信包构建 ================= */
 /**
@@ -253,6 +252,7 @@ void Servo_Mapping_Init(void)
   */
 void motor_mapping_init(void)
 {
+	MoterMap.online = 0;
 	JointControllers_Init();
 	for (uint8_t i = 0; i < SERVOS_NUM; i++)
     {
@@ -309,17 +309,21 @@ static void map_zdt_to_joint(void)
   */
 void CustomController_AngleMapping(void)
 {
-	MoterMap.online = 1;		//自控上线
 	
 	#if CONTROLLER_MODE == CONTROLLER_MODE_SERVO		//舵机自控
+	
 	map_servo_to_joint();
+	
 	#elif CONTROLLER_MODE == CONTROLLER_MODE_ZDT		//电机自控
+	
 	map_zdt_to_joint();
+	
 	#endif
+	
 	//输出限幅
 	LIMIT(MoterMap.j0       ,-2*PI/3	,2*PI/3	);
 	LIMIT(MoterMap.j1     	, -PI/2	    , PI/2	);
-	LIMIT(MoterMap.j2    	, -3*PI/4	,0	);
+	LIMIT(MoterMap.j2    	, -5*PI/6	,0	);
 	LIMIT(MoterMap.j3       ,-2*PI/3	,2*PI/3	);
 	LIMIT(MoterMap.j4       ,-2*PI/3	,2*PI/3	);
 	LIMIT(MoterMap.j5       ,-2*PI/3	,2*PI/3	);  
@@ -334,12 +338,12 @@ void CustomController_AngleMapping(void)
   */
 void Get_theta(MotorCurrentInfo *motor_currents, uint8_t id)
 {
-	if(id == 0)			theta[0] = PI/2;
+	if	(id == 0)		theta[0] = motor_currents[0].position;
 	else if(id == 1)		theta[1] = motor_currents[1].position;  
 	else if(id == 2)		theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
 	else if(id == 3)		theta[3] = - motor_currents[3].position*PI / 180.0f;
 	else if(id == 4)		theta[4] = - motor_currents[4].position*PI / 180.0f;
-	else if(id == 5)		theta[5] = - motor_currents[5].position*PI / 180.0f;
+	else if(id == 5)		theta[5] = motor_currents[5].position*PI / 180.0f;
 }
 /* ================= 处理ZDT CAN帧 ================= */
 /**
@@ -385,9 +389,8 @@ static void Update_All_Joint_Impedance(float dt_s)
 
     for (i = 0; i < JOINT_NUM; i++)
     {
-        /* 1) 更新测量值：这里先用关节角做差分估速 */
-        JointImp_UpdateMeasurement(&g_joint_imp[i], theta[i], dt_s);
-
+		/* 1) 更新关节位置和速度 */
+		JointImp_UpdateMeasurementWithVelocity(&g_joint_imp[i], theta[i], MotorCurrents[i].dq);
         /* 2) 写入重力补偿 */
         JointImp_SetGravityTorque(&g_joint_imp[i], tau[i]);
 
@@ -395,7 +398,10 @@ static void Update_All_Joint_Impedance(float dt_s)
         JointImp_SetFeedforwardTorque(&g_joint_imp[i], 0.0f);
 
         /* 4) 计算最终关节力矩 */
-        g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
+		if(i != 1)		//关节1是mit电机不需要自行计算
+		{
+			g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
+		}
     }
 }
 /**
@@ -419,6 +425,8 @@ void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
 	if(send_tau_mit > 9.6f)send_tau_mit = 9.6f;
 	else if(send_tau_mit < -9.6f)send_tau_mit = -9.6f;
 	// 其余关节
+	send_tauqe[0] = (uint16_t)(fabsf(tauqe[0]) * TAU_MAP_PARAM1);
+    send_tauqe[0] = Limite_tauqe(send_tauqe[0], 2500, 0);
     send_tauqe[2] = (uint16_t)(fabsf(tauqe[2]) * TAU_MAP_PARAM3);
     send_tauqe[2] = Limite_tauqe(send_tauqe[2], 2500, 0);   // 接收返回值
     send_tauqe[3] = (uint16_t)(fabsf(tauqe[3]) * TAU_MAP_PARAM4);
@@ -426,7 +434,7 @@ void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
     send_tauqe[4] = (uint16_t)(fabsf(tauqe[4]) * TAU_MAP_PARAM5);
     send_tauqe[4] = Limite_tauqe(send_tauqe[4], 2000, 0);
     send_tauqe[5] = (uint16_t)(fabsf(tauqe[5]) * TAU_MAP_PARAM6);
-    send_tauqe[5] = Limite_tauqe(send_tauqe[5], 2000, 0);
+    send_tauqe[5] = Limite_tauqe(send_tauqe[5], 1000, 0);
 }
 /* ================= 发送自定义控制器数据 ================= */
 /**
@@ -436,6 +444,8 @@ void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
   */
 void CustomController_StructSend(moterMapHeader *data)
 {
+	datapack_ordorcount ++;
+	data->res[0] = datapack_ordorcount;
     //设置帧头
     CustomController.txFrameHeader.SOF = 0XA5;
     CustomController.txFrameHeader.DataLength = sizeof(moterMapHeader);
@@ -531,7 +541,6 @@ void Servo_Task(void)
 	CustomController_AngleMapping();
 	//计算重力补偿
 	gravity_compensation(theta, tau);
-	TaskFrequencycount(GETTASK);
 }
 
 void Robot_Task(void)
@@ -554,11 +563,9 @@ void Robot_Task(void)
 	// 计算并发送力矩指令
     Update_All_Joint_Impedance(ROBOT_TASK_PERIOD_S);  // 将周期转换为秒
 	// 计算发送力矩值
-	calc_send_torque(send_tau,tau);
+	calc_send_torque(send_tau,g_tau_cmd);
 	//发送力矩
 	Set_Taget_Torque();
-	//计算帧率
-	TaskFrequencycount(SENDTASK);
 }
 
 #endif
@@ -572,11 +579,13 @@ void Robot_Task(void)
   */
 void Read_zdt_Pos(void)
 {
-//	ZDT_X42_V2_Read_Sys_Params(1 ,S_CPOS);
-	ZDT_X42_V2_Read_Sys_Params(3 ,S_CPOS);
-	ZDT_X42_V2_Read_Sys_Params(4 ,S_CPOS);
-	ZDT_X42_V2_Read_Sys_Params(5 ,S_CPOS);
-	ZDT_X42_V2_Read_Sys_Params(6 ,S_CPOS);
+	//关节1和关节3
+	USER_ZDT_X42_V2_Read_Sys_Params(&hfdcan2, 1 ,S_CPOS);
+	USER_ZDT_X42_V2_Read_Sys_Params(&hfdcan2, 3 ,S_CPOS);
+	//关节四五六
+	USER_ZDT_X42_V2_Read_Sys_Params(&hfdcan1, 4 ,S_CPOS);
+	USER_ZDT_X42_V2_Read_Sys_Params(&hfdcan1, 5 ,S_CPOS);
+	USER_ZDT_X42_V2_Read_Sys_Params(&hfdcan1, 6 ,S_CPOS);
 
 
 }
@@ -588,22 +597,25 @@ void Read_zdt_Pos(void)
 void Set_Taget_Torque(void)
 {
 	#if !debug		//正常发送补偿力矩
-	//发送rs补偿力矩
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.12, send_tau_mit);
-	//发送zdt补偿力矩
-	ZDT_X42_V2_Torque_Control(3, MotorCurrents[2].dir, 25000,send_tau[2],0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(4, MotorCurrents[3].dir, 15000,send_tau[3],0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(5, MotorCurrents[4].dir, 25000,send_tau[4],0);
-	ZDT_X42_V2_Torque_Control(6, MotorCurrents[5].dir, 15000,send_tau[5],0);
+	
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 15000,send_tau[0],0);//1为顺时针
+	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.10, send_tau_mit);
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000,send_tau[2],0);//1为顺时针
+	
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 15000,send_tau[3],0);//1为顺时针
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 25000,send_tau[4],0);
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 15000,send_tau[5],0);
 	#endif
+	
 	#if debug		//发送0力矩
-	//发送rs补偿力矩
+	
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 10,10,0);//1为顺时针
 	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.12, 0);
-	//发送zdt补偿力矩
-	ZDT_X42_V2_Torque_Control(3, MotorCurrents[2].dir, 0,0,0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(4, MotorCurrents[3].dir, 0,0,0);//1为顺时针
-	ZDT_X42_V2_Torque_Control(5, MotorCurrents[4].dir, 0,0,0);
-	ZDT_X42_V2_Torque_Control(6, MotorCurrents[5].dir, 0,0,0);
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 10,10,0);//1为顺时针
+
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 10,10,0);//1为顺时针
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 10,10,0);
+	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 10,10,0);
 	#endif
 }
 #endif

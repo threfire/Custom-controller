@@ -32,6 +32,8 @@
 #include "ws2812.h"
 #include "servo_mapping.h"
 #include "ZDT_X42_V2.h"
+#include "safewarning.h"
+#include "userkey.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,7 +43,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define DEBUG 1		//调试模式
+#define DEBUG 0		//调试模式
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,6 +59,8 @@ uint8_t miro_uart7_rebuffer[10];
 uint8_t uart1_rebuffer[10];
 
 uint8_t can2send_test[8] = {0xff,0xff,0xff,0xff,0xff,0xff,0x00,0xfd};
+
+uint8_t datapack_ordorcount = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -106,16 +110,20 @@ int main(void)
   MX_FDCAN1_Init();
   MX_TIM6_Init();
   MX_FDCAN2_Init();
+  MX_TIM12_Init();
   /* USER CODE BEGIN 2 */
   	Servo_Mapping_Init();
 	bsp_can_init();
-	
+	Beep_Init();
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2);
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, uart1_rebuffer, sizeof(uart1_rebuffer)*2);
 
 //	__HAL_UART_ENABLE_IT(&huart7,UART_IT_IDLE);
-	HAL_Delay (2000);
+	HAL_Delay (1000);
 	HAL_TIM_Base_Start_IT(&htim6);
+	// 播放开机提示音
+
+    Beep_Play(BEEP_POWER_ON);
 	/*CAN独立指令发送*/
 	#if DEBUG
 //	Motor_MIT_MODE(&hfdcan2, 0x02);
@@ -256,6 +264,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if (htim->Instance == TIM6) {
 	TaskFrequencyCheck(GETTASK);
 	TaskFrequencyCheck(SENDTASK);
+	datapack_ordorcount = 0;
+	Key_Tick();
+		
+	Beep_Task();
   }
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM23) {

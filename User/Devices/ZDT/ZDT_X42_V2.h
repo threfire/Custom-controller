@@ -56,4 +56,6 @@ void ZDT_X42_V2_Origin_Trigger_Return(uint8_t addr, uint8_t o_mode, bool snF); /
 void ZDT_X42_V2_Origin_Interrupt(uint8_t addr); // 强制中断并退出回零
 void ZDT_X42_V2_Receive_Data(uint8_t *rxCmd, uint8_t *rxCount); // 返回数据接收函数
 
+void USER_ZDT_X42_V2_Read_Sys_Params(FDCAN_HandleTypeDef *hfdcan, uint8_t addr, SysParams_t s); // 读取参数
+void USER_ZDT_X42_V2_Torque_Control(FDCAN_HandleTypeDef *hfdcan, uint8_t addr, uint8_t sign, uint16_t t_ramp, uint16_t torque, uint8_t snF); // 力矩模式控制
 #endif

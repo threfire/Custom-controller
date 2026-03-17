@@ -424,30 +424,80 @@ void ZDT_X42_V2_Origin_Interrupt(uint8_t addr)
   can_SendCmd(cmd, 4);
 }
 
+/*=====================自定义的修改的函数====================*/
 /**
-  * @brief    接收数据
-  * @param    rxCmd   : 接收到的数据缓存在该数组
-  * @param    rxCount : 接收到的数据长度
-  * @retval   无
+  * @brief    读取系统参数
+  * @param    addr  ：电机地址
+  * @param    s     ：系统参数类型
+  * @retval   地址 + 功能码 + 命令状态 + 校验字节
   */
-//void ZDT_X42_V2_Receive_Data(uint8_t *rxCmd, uint8_t *rxCount)
-//{
-//	uint16_t i = 0, timeout = 0;
+void USER_ZDT_X42_V2_Read_Sys_Params(FDCAN_HandleTypeDef *hfdcan, uint8_t addr, SysParams_t s)
+{
+  uint8_t cmd[16] = {0};
+  
+  // 装载命令
+  cmd[0] =  addr;                       // 地址
 
-//	// can.rxFrameFlag在can.c的CAN接收中断中进行置位
-//	while(can.rxFrameFlag == false)
-//	{
-//		// 等待100毫秒还未置位，就判定为没有数据返回，超时退出
-//		delay_ms(1); ++timeout; if(timeout > 100) { can.CAN_RxMsg.DLC = 0; break; }
-//	}
-//	can.rxFrameFlag = false;
-//	
-//	// 获取返回数据长度
-//	*rxCount = can.CAN_RxMsg.DLC;
-//	
-//	// 获取返回数据地址
-//	rxCmd[0] = (uint8_t)(can.CAN_TxMsg.ExtId >> 8);
-//	
-//	// 获取返回数据（只能获取8字节以内的单包数据）
-//	for(i=0; i < can.CAN_RxMsg.DLC; i++) { rxCmd[i + 1] = can.CAN_RxMsg.Data[i]; }
-//}
+  switch(s)                             // 功能码
+  {
+    case S_VER   : cmd[1] = 0x1F; break;                  /* 读取固件版本和对应的硬件版本 */
+    case S_RL    : cmd[1] = 0x20; break;                  /* 读取读取相电阻和相电感 */
+    case S_PID   : cmd[1] = 0x21; break;                  /* 读取PID参数 */
+    case S_ORG   : cmd[1] = 0x22; break;                  /* 读取回零参数 */
+    case S_VBUS  : cmd[1] = 0x24; break;                  /* 读取总线电压 */
+    case S_CBUS  : cmd[1] = 0x26; break;                  /* 读取总线电流 */
+    case S_CPHA  : cmd[1] = 0x27; break;                  /* 读取相电流 */
+    case S_ENC   : cmd[1] = 0x29; break;                  /* 读取编码器原始值 */
+    case S_CPUL  : cmd[1] = 0x30; break;                  /* 读取实时脉冲数（根据实时位置计算得到的脉冲数） */
+    case S_ENCL  : cmd[1] = 0x31; break;                  /* 读取经过线性化校准后的编码器值 */
+    case S_TPUL  : cmd[1] = 0x32; break;                  /* 读取输入脉冲数 */
+    case S_TPOS  : cmd[1] = 0x33; break;                  /* 读取电机目标位置 */
+    case S_OPOS  : cmd[1] = 0x34; break;                  /* 读取电机实时设定的目标位置（开环模式的实时位置） */
+    case S_VEL   : cmd[1] = 0x35; break;                  /* 读取电机实时转速 */
+    case S_CPOS  : cmd[1] = 0x36; break;                  /* 读取电机实时位置（基于角度编码器累加的电机实时位置） */
+    case S_PERR  : cmd[1] = 0x37; break;                  /* 读取电机位置误差 */
+    case S_TEMP  : cmd[1] = 0x39; break;                  /* 读取电机实时温度 */
+    case S_SFLAG : cmd[1] = 0x3A; break;                  /* 读取状态标志位 */
+    case S_OFLAG : cmd[1] = 0x3B; break;                  /* 读取回零状态标志位 */
+    case S_Conf  : cmd[1] = 0x42; cmd[2] = 0x6C; break;   /* 读取驱动参数 */
+    case S_State : cmd[1] = 0x43; cmd[2] = 0x7A; break;   /* 读取系统状态参数 */
+    default: break;
+  }
+
+  // 发送命令
+  if(s >= S_Conf)
+  {
+    cmd[3] = 0x6B; USER_can_SendCmd(hfdcan, cmd, 4);
+  }
+  else
+  {
+    cmd[2] = 0x6B; USER_can_SendCmd(hfdcan, cmd, 3);
+  }
+}
+/**
+  * @brief    力矩模式
+  * @param    addr  ：电机地址
+  * @param    sign  ：符号         ，0为正，其余值为负
+  * @param    t_ramp：斜率(Ma/s)   ，范围0 - 65535Ma/s
+  * @param    torque：力矩(Ma)     ，范围0 - 4000Ma
+  * @param    snF   ：多机同步标志 ，0为不启用，其余值启用
+  * @retval   地址 + 功能码 + 命令状态 + 校验字节
+  */
+void USER_ZDT_X42_V2_Torque_Control(FDCAN_HandleTypeDef *hfdcan, uint8_t addr, uint8_t sign, uint16_t t_ramp, uint16_t torque, uint8_t snF)
+{
+  uint8_t cmd[16] = {0};
+  
+  // 装载命令
+  cmd[0] =  addr;                       // 地址
+  cmd[1] =  0xF5;                       // 功能码
+  cmd[2] =  sign;                       // 符号（方向）
+  cmd[3] =  (uint8_t)(t_ramp >> 8);     // 力矩斜率(Ma/s)高8位字节
+  cmd[4] =  (uint8_t)(t_ramp >> 0);     // 力矩斜率(Ma/s)低8位字节
+  cmd[5] =  (uint8_t)(torque >> 8);     // 力矩(Ma)高8位字节
+  cmd[6] =  (uint8_t)(torque >> 0);     // 力矩(Ma)低8位字节
+  cmd[7] =  snF;                        // 多机同步运动标志
+  cmd[8] =  0x6B;                       // 校验字节
+  
+  // 发送命令
+  USER_can_SendCmd(hfdcan, cmd, 9);
+}
