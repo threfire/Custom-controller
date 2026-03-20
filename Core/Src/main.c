@@ -60,7 +60,8 @@ uint8_t uart1_rebuffer[10];
 
 uint8_t can2send_test[8] = {0xff,0xff,0xff,0xff,0xff,0xff,0x00,0xfd};
 
-uint8_t datapack_ordorcount = 0;
+uint16_t tim6_tick = 0;
+uint16_t datapack_ordorcount = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -264,7 +265,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if (htim->Instance == TIM6) {
 	TaskFrequencyCheck(GETTASK);
 	TaskFrequencyCheck(SENDTASK);
-	datapack_ordorcount = 0;
+		tim6_tick ++;
+		if(tim6_tick>= 999)
+		{
+			datapack_ordorcount = 0;
+			tim6_tick = 0;
+		}
 	Key_Tick();
 		
 	Beep_Task();

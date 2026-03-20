@@ -10,9 +10,9 @@
 /* ================= 常量定义 ================= */
 #define debug 0
 // 不同关节的力矩转换系数
-#define TAU_MAP_PARAM1 1000
+#define TAU_MAP_PARAM1 2000
 #define TAU_MAP_PARAM2 8.5f
-#define TAU_MAP_PARAM3 6000
+#define TAU_MAP_PARAM3 4900
 #define TAU_MAP_PARAM4 9000
 #define TAU_MAP_PARAM5 13600
 #define TAU_MAP_PARAM6 26000
@@ -48,7 +48,7 @@ static const float g_kp_init[JOINT_NUM] = {
     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 static const float g_kd_init[JOINT_NUM] = {
-    0.1f, 0.05f, 0.07f, 0.03f, 0.015f, 0.002f
+    -0.008f, 0.05f, 0.09f, 0.04f, 0.02f, 0.008f
 };
 static const float g_torque_limit_init[JOINT_NUM] = {
     1.0f, 1.2f, 1.5f, 1.0f, 0.8f, 0.6f
@@ -297,9 +297,9 @@ static void map_zdt_to_joint(void)
 {
 	MoterMap.j0 = MotorCurrents[0].position * PI / 180.0f;    // 
 	MoterMap.j1 = PI/2 - MotorCurrents[1].position;             // 
-	MoterMap.j2 = MotorCurrents[2].position * PI / 180.0f;    // 
+	MoterMap.j2 = - PI + MotorCurrents[2].position * PI / 180.0f;    // 
 	MoterMap.j3 = MotorCurrents[3].position * PI / 180.0f;      // 
-	MoterMap.j4 = MotorCurrents[4].position * PI / 180.0f;      // 
+	MoterMap.j4 = 1.2f*MotorCurrents[4].position * PI / 180.0f;      // 
 	MoterMap.j5 = MotorCurrents[5].position * PI / 180.0f;      // 
 }
 /**
@@ -321,10 +321,10 @@ void CustomController_AngleMapping(void)
 	#endif
 	
 	//输出限幅
-	LIMIT(MoterMap.j0       ,-2*PI/3	,2*PI/3	);
+	LIMIT(MoterMap.j0       ,-PI/2		,PI/2	);
 	LIMIT(MoterMap.j1     	, -PI/2	    , PI/2	);
-	LIMIT(MoterMap.j2    	, -5*PI/6	,0	);
-	LIMIT(MoterMap.j3       ,-2*PI/3	,2*PI/3	);
+	LIMIT(MoterMap.j2    	, -11*PI/12	,-PI/4	);
+	LIMIT(MoterMap.j3       ,-PI		,PI	);
 	LIMIT(MoterMap.j4       ,-2*PI/3	,2*PI/3	);
 	LIMIT(MoterMap.j5       ,-2*PI/3	,2*PI/3	);  
 }
@@ -340,7 +340,7 @@ void Get_theta(MotorCurrentInfo *motor_currents, uint8_t id)
 {
 	if	(id == 0)		theta[0] = motor_currents[0].position;
 	else if(id == 1)		theta[1] = motor_currents[1].position;  
-	else if(id == 2)		theta[2] = -PI/2 - motor_currents[2].position*PI / 180.0f;
+	else if(id == 2)		theta[2] = PI/2 - motor_currents[2].position*PI / 180.0f;
 	else if(id == 3)		theta[3] = - motor_currents[3].position*PI / 180.0f;
 	else if(id == 4)		theta[4] = - motor_currents[4].position*PI / 180.0f;
 	else if(id == 5)		theta[5] = motor_currents[5].position*PI / 180.0f;
@@ -444,8 +444,9 @@ void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
   */
 void CustomController_StructSend(moterMapHeader *data)
 {
-	datapack_ordorcount ++;
-	data->res[0] = datapack_ordorcount;
+	datapack_ordorcount = HAL_GetTick();
+	data->res[0] = datapack_ordorcount>>8;
+	data->res[1] = datapack_ordorcount & 0xff;
     //设置帧头
     CustomController.txFrameHeader.SOF = 0XA5;
     CustomController.txFrameHeader.DataLength = sizeof(moterMapHeader);
@@ -599,7 +600,7 @@ void Set_Taget_Torque(void)
 	#if !debug		//正常发送补偿力矩
 	
 	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 15000,send_tau[0],0);//1为顺时针
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.10, send_tau_mit);
+	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.03, send_tau_mit);
 	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000,send_tau[2],0);//1为顺时针
 	
 	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 15000,send_tau[3],0);//1为顺时针

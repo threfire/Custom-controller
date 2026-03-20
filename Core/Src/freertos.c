@@ -216,7 +216,7 @@ void MapDataSend_task(void const * argument)
   for(;;)
   {
 	CustomController_StructSend(&MoterMap);
-    osDelay(10);
+    osDelay(28);
   }
   /* USER CODE END MapDataSend_task */
 }
