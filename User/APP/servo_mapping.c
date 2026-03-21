@@ -6,13 +6,13 @@
 #include "ZDT_X42_V2.h"
 #include "Gravity_comp.h"
 #include "joint_impedance.h"
-
+#include "kinematics.h"
 /* ================= 常量定义 ================= */
 #define debug 0
 // 不同关节的力矩转换系数
 #define TAU_MAP_PARAM1 2000
 #define TAU_MAP_PARAM2 8.5f
-#define TAU_MAP_PARAM3 4900
+#define TAU_MAP_PARAM3 4800
 #define TAU_MAP_PARAM4 9000
 #define TAU_MAP_PARAM5 13600
 #define TAU_MAP_PARAM6 26000
@@ -25,6 +25,9 @@
 #define JOINT_NUM 6
 
 #define V_DT_S 0.001f
+
+/* ================= test用变量 ================= */
+uint8_t test_flag;
 /* ================= 静态变量 ================= */
 static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum 机位置查询帧缓冲区
 static uint8_t load_txbuf[7];  // 55 55 id 03 28 checksum 舵机加载/卸载帧缓冲区
@@ -42,13 +45,19 @@ typedef struct Frame {
 static JustFloat frame = {
     .tail = {0x00, 0x00, 0x80, 0x7f}
 };
-
+//工具端目标位姿
+	static float T_tool_des[16] = {
+        1,0,0,-0.03f,
+        0,1,0,0,
+        0,0,1,0.03f,
+        0,0,0,1
+    };
 //关节力矩计算参数常量定义
 static const float g_kp_init[JOINT_NUM] = {
     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 static const float g_kd_init[JOINT_NUM] = {
-    -0.008f, 0.05f, 0.09f, 0.04f, 0.02f, 0.008f
+    -0.008f, 0.05f, 0.10f, 0.03f, 0.02f, 0.008f
 };
 static const float g_torque_limit_init[JOINT_NUM] = {
     1.0f, 1.2f, 1.5f, 1.0f, 0.8f, 0.6f
@@ -70,7 +79,10 @@ uint16_t Filtering_angle[SERVOS_NUM];
 float theta[MOTORS_NUM];//rad,弧度制2π~-2π
 // 力矩数组（用于重力补偿）
 float tau[MOTORS_NUM];
-
+float g_theta_des[6];  // 目标关节角度（用于阻抗控制）
+float T_tool_cur[16];
+float T_new[16];
+float raw_angles[6];// raw_angles[0] ~ raw_angles[5] 即为各关节的原始传感器角度
 GPIO_PinState key_lev;
 
 servoMapping ServoMap;
@@ -86,6 +98,7 @@ MotorCurrentInfo MotorCurrents[SERVOS_NUM];
 extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 extern MITMeasure_t MIT_MOTOR_MEASURE;
 extern uint8_t datapack_ordorcount;
+
 /* ================= 静态函数声明 ================= */
 static void JustFloat_send(moterMapHeader *MoterMap);
 
@@ -338,12 +351,35 @@ void CustomController_AngleMapping(void)
   */
 void Get_theta(MotorCurrentInfo *motor_currents, uint8_t id)
 {
-	if	(id == 0)		theta[0] = motor_currents[0].position;
+	if	(id == 0)		theta[0] = PI/2 + motor_currents[0].position*PI / 180.0f;
 	else if(id == 1)		theta[1] = motor_currents[1].position;  
 	else if(id == 2)		theta[2] = PI/2 - motor_currents[2].position*PI / 180.0f;
 	else if(id == 3)		theta[3] = - motor_currents[3].position*PI / 180.0f;
 	else if(id == 4)		theta[4] = - motor_currents[4].position*PI / 180.0f;
 	else if(id == 5)		theta[5] = motor_currents[5].position*PI / 180.0f;
+}
+float newtheta[6];
+void Get_transmittheta(float theta[6])
+{
+	newtheta[0] = -theta[0];
+	for(uint8_t i = 1;i<6;i++)
+	{
+		newtheta[i] = theta[i];
+	}
+}
+/* ================= 从DH参数θ角得到电机位置 ================= */
+/**
+ * @brief 将 DH 建模角度逆转换为原始传感器角度（电机/舵机）
+ * @param theta_des  DH 关节角度（弧度），长度为 6
+ * @param raw        输出原始角度（关节 0,2,3,4,5 为度；关节 1 为弧度）
+ */
+void dh_to_original(const float theta_des[6], float raw[6]) {
+    raw[0] = theta_des[0] * 180.0f / KIN_PI;        // 关节0：度
+    raw[1] = theta_des[1];                          // 关节1：弧度（MIT电机）
+    raw[2] = (KIN_PI / 2.0f - theta_des[2]) * 180.0f / KIN_PI; // 关节2：度
+    raw[3] = -theta_des[3] * 180.0f / KIN_PI;       // 关节3：度
+    raw[4] = -theta_des[4] * 180.0f / KIN_PI;       // 关节4：度
+    raw[5] = theta_des[5] * 180.0f / KIN_PI;        // 关节5：度
 }
 /* ================= 处理ZDT CAN帧 ================= */
 /**
@@ -386,22 +422,25 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
 static void Update_All_Joint_Impedance(float dt_s)
 {
     uint8_t i;
-
     for (i = 0; i < JOINT_NUM; i++)
     {
-		/* 1) 更新关节位置和速度 */
-		JointImp_UpdateMeasurementWithVelocity(&g_joint_imp[i], theta[i], MotorCurrents[i].dq);
+        /* 1) 更新关节位置和速度 */
+        JointImp_UpdateMeasurementWithVelocity(&g_joint_imp[i], theta[i], MotorCurrents[i].dq);
+        
         /* 2) 写入重力补偿 */
         JointImp_SetGravityTorque(&g_joint_imp[i], tau[i]);
-
-        /* 3) 额外前馈，暂时设 0 */
+        
+        /* 3) 设置参考位置（目标关节角度），参考速度设为0（静止目标） */
+//        JointImp_SetReference(&g_joint_imp[i], g_theta_des[i], 0.0f);   
+        
+        /* 4) 额外前馈 */
         JointImp_SetFeedforwardTorque(&g_joint_imp[i], 0.0f);
-
-        /* 4) 计算最终关节力矩 */
-		if(i != 1)		//关节1是mit电机不需要自行计算
-		{
-			g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
-		}
+        
+        /* 5) 计算最终关节力矩 */
+        if (i != 1)  // 关节2（索引1）是MIT电机，独立处理
+        {
+            g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
+        }
     }
 }
 /**
@@ -546,7 +585,32 @@ void Servo_Task(void)
 
 void Robot_Task(void)
 {
+	//*运动学解算*/
+	// 1. 计算当前工具末端位姿
+	Get_transmittheta(theta);
+	compute_tool_pose(newtheta, T_tool_cur);
+	// 2. 计算工具末端位姿相对工具坐标系变换后相对基座坐标系的齐次变换矩阵
+	tool_relative_transform(T_tool_cur, T_tool_des, T_new);   // T_new 是基座下的新期望位姿
+    // 3. 计算目标关节角度（通过转换后的新位姿）
+    if (compute_desired_joint_angles(T_new, theta, g_theta_des)) {
+		test_flag = 1;
+		dh_to_original(g_theta_des, raw_angles);
+        // 成功，目标关节角度已存入 g_theta_des
+		// 对目标角度进行关节限幅（使用与当前角度相同的限幅值）
+//        LIMIT(g_theta_des[0], -PI/2, PI/2);
+//        LIMIT(g_theta_des[1], -PI/2, PI/2);
+//        LIMIT(g_theta_des[2], -11*PI/12, -PI/4);
+//        LIMIT(g_theta_des[3], -PI, PI);
+//        LIMIT(g_theta_des[4], -2*PI/3, 2*PI/3);
+//        LIMIT(g_theta_des[5], -2*PI/3, 2*PI/3);
+    } else {
+		test_flag = 0;
+        // 无解，保持当前控制或发出警告
+    }
 
+    
+
+	/*阻抗控制*/
     // 计算每个关节的角速度
     for (uint8_t i = 0; i < JOINT_NUM; i++)
     {
