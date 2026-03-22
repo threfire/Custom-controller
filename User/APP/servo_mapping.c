@@ -9,16 +9,18 @@
 #include "kinematics.h"
 /* ================= 常量定义 ================= */
 #define debug 0
+#define only_gravity 1
 // 不同关节的力矩转换系数
 #define TAU_MAP_PARAM1 2000
-#define TAU_MAP_PARAM2 8.5f
-#define TAU_MAP_PARAM3 4800
-#define TAU_MAP_PARAM4 9000
+#define TAU_MAP_PARAM2 9.0f
+#define TAU_MAP_PARAM3 4600
+#define TAU_MAP_PARAM4 6000
 #define TAU_MAP_PARAM5 13600
 #define TAU_MAP_PARAM6 26000
 
 // 滤波系数
 #define FILTER_ALPHA           0.2f
+#define MIT_POS_STEP_MAX       0.0015f   // MIT关节每周期最大位置变化(rad)，首测建议 0.001~0.002
 
 #define CH_COUNT 6
 
@@ -47,23 +49,24 @@ static JustFloat frame = {
 };
 //工具端目标位姿
 	static float T_tool_des[16] = {
-        1,0,0,-0.03f,
+        1,0,0,0,
         0,1,0,0,
-        0,0,1,0.03f,
+        0,0,1,0.05,
         0,0,0,1
     };
 //关节力矩计算参数常量定义
 static const float g_kp_init[JOINT_NUM] = {
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+    -0.1f, 1.0f, -0.2f, -0.15f, -0.15f, -0.15f
 };
 static const float g_kd_init[JOINT_NUM] = {
-    -0.008f, 0.05f, 0.10f, 0.03f, 0.02f, 0.008f
+    -0.002f, 0.01f, -0.08f, -0.008f, -0.01f, -0.006f
 };
 static const float g_torque_limit_init[JOINT_NUM] = {
-    1.0f, 1.2f, 1.5f, 1.0f, 0.8f, 0.6f
+    0.4f, 0.6f, 0.6f, 0.4f, 0.3f, 0.2f
 };
+
 static const float g_torque_rate_limit_init[JOINT_NUM] = {
-    30.0f, 40.0f, 50.0f, 40.0f, 30.0f, 20.0f
+    10.0f, 10.0f, 10.0f, 8.0f, 8.0f, 5.0f
 };
 static const float g_gear_ratio_init[JOINT_NUM] = {
     1.0f, 6.0f, 6.0f, 6.0f, 6.0f, 6.0f
@@ -80,9 +83,11 @@ float theta[MOTORS_NUM];//rad,弧度制2π~-2π
 // 力矩数组（用于重力补偿）
 float tau[MOTORS_NUM];
 float g_theta_des[6];  // 目标关节角度（用于阻抗控制）
+float g_theta_ref_lpf[6];   // 低通后的实际控制参考角
 float T_tool_cur[16];
 float T_new[16];
 float raw_angles[6];// raw_angles[0] ~ raw_angles[5] 即为各关节的原始传感器角度
+
 GPIO_PinState key_lev;
 
 servoMapping ServoMap;
@@ -99,6 +104,107 @@ extern uint8_t uart7_rebuffer[SERVO_RX_BUF_NUM];
 extern MITMeasure_t MIT_MOTOR_MEASURE;
 extern uint8_t datapack_ordorcount;
 
+/* ================= 末端位置模式状态 ================= */
+static float T_tool_goal[16];
+static uint8_t g_pos_mode_enable = 0U;
+static uint8_t g_prev_clamp = 0U;
+static uint8_t g_have_goal = 0U;
+
+/* ================= MIT关节(索引1)发送缓存 ================= */
+ float g_mit_pos_cmd = 0.0f;
+ float g_mit_vel_cmd = 0.0f;
+ float g_mit_kp_cmd  = 0.0f;
+ float g_mit_kd_cmd  = 0.0f;
+ float g_mit_ff_cmd  = 0.0f;
+
+static void copy_mat44(const float src[16], float dst[16])
+{
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        dst[i] = src[i];
+    }
+}
+
+static float clampf_local(float x, float lo, float hi)
+{
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
+
+/* 把目标角映射到与当前参考最接近的 2pi 等价分支，避免关节2这类分支跳变 */
+static float nearest_equiv_local(float angle, float ref)
+{
+    while (angle - ref > PI)  angle -= 2.0f * PI;
+    while (angle - ref < -PI) angle += 2.0f * PI;
+    return angle;
+}
+
+/* 一阶低通：ref = ref + alpha * (target - ref) */
+static void LowPass_Target_Ref(const float theta_target[6], float theta_ref_lpf[6], float alpha)
+{
+    for (uint8_t i = 0; i < JOINT_NUM; i++)
+    {
+        float target = nearest_equiv_local(theta_target[i], theta_ref_lpf[i]);
+        theta_ref_lpf[i] += alpha * (target - theta_ref_lpf[i]);
+    }
+}
+/* 硬限速：每周期最多向目标靠近 max_step */
+static float StepTowardAngleLimited(float current_cmd, float target_cmd, float max_step)
+{
+    float target = nearest_equiv_local(target_cmd, current_cmd);
+    float delta  = target - current_cmd;
+
+    if (delta >  max_step) delta =  max_step;
+    if (delta < -max_step) delta = -max_step;
+
+    return current_cmd + delta;
+}
+
+static void Hold_Current_Pose(void)
+{
+    for (uint8_t i = 0; i < JOINT_NUM; i++)
+    {
+        JointImp_EnableHoldCurrent(&g_joint_imp[i]);
+    }
+}
+static void Update_Position_Mode_From_Key(void)
+{
+    uint8_t clamp_now = (MoterMap.clamp == 1U) ? 1U : 0U;
+
+    /* 上升沿：锁存一次目标位姿，并把低通参考同步到当前角，避免首拍跳变 */
+        if ((clamp_now == 1U) && (g_prev_clamp == 0U))
+    {
+        tool_relative_transform(T_tool_cur, T_tool_des, T_tool_goal);
+
+        for (uint8_t i = 0; i < JOINT_NUM; i++)
+        {
+            g_theta_ref_lpf[i] = theta[i];
+        }
+
+        g_mit_pos_cmd = theta[1];
+        g_mit_vel_cmd = 0.0f;
+
+        g_pos_mode_enable = 1U;
+        g_have_goal = 1U;
+    }
+    /* 下降沿：退出位置模式，锁当前姿态，同时把低通参考贴回当前角 */
+                else if ((clamp_now == 0U) && (g_prev_clamp == 1U))
+    {
+        g_pos_mode_enable = 0U;
+        Hold_Current_Pose();
+
+        for (uint8_t i = 0; i < JOINT_NUM; i++)
+        {
+            g_theta_ref_lpf[i] = theta[i];
+        }
+
+        g_mit_pos_cmd = theta[1];
+        g_mit_vel_cmd = 0.0f;
+    }
+
+    g_prev_clamp = clamp_now;
+}
 /* ================= 静态函数声明 ================= */
 static void JustFloat_send(moterMapHeader *MoterMap);
 
@@ -208,7 +314,7 @@ void JointControllers_Init(void)
         cfg.kd = g_kd_init[i];
         cfg.torque_limit = g_torque_limit_init[i];
         cfg.torque_rate_limit = g_torque_rate_limit_init[i];
-        cfg.vel_lpf_alpha = 0.90f;
+        cfg.vel_lpf_alpha = 0.9f;
 
         cfg.torque_constant = g_kt_init[i];
         cfg.gear_ratio = g_gear_ratio_init[i];
@@ -220,6 +326,7 @@ void JointControllers_Init(void)
         JointImp_EnableHoldCurrent(&g_joint_imp[i]);
 
         g_tau_cmd[i] = 0.0f;
+        g_theta_ref_lpf[i] = 0.0f;
     }
 }
 /**
@@ -352,21 +459,21 @@ void CustomController_AngleMapping(void)
 void Get_theta(MotorCurrentInfo *motor_currents, uint8_t id)
 {
 	if	(id == 0)		theta[0] = PI/2 + motor_currents[0].position*PI / 180.0f;
-	else if(id == 1)		theta[1] = motor_currents[1].position;  
-	else if(id == 2)		theta[2] = PI/2 - motor_currents[2].position*PI / 180.0f;
-	else if(id == 3)		theta[3] = - motor_currents[3].position*PI / 180.0f;
-	else if(id == 4)		theta[4] = - motor_currents[4].position*PI / 180.0f;
-	else if(id == 5)		theta[5] = motor_currents[5].position*PI / 180.0f;
+	else if(id == 1)		theta[1] = - motor_currents[1].position;  
+	else if(id == 2)		theta[2] = PI/2 + motor_currents[2].position*PI / 180.0f-2*PI;
+	else if(id == 3)		theta[3] = motor_currents[3].position*PI / 180.0f;
+	else if(id == 4)		theta[4] = motor_currents[4].position*PI / 180.0f;
+	else if(id == 5)		theta[5] = -motor_currents[5].position*PI / 180.0f;
 }
-float newtheta[6];
-void Get_transmittheta(float theta[6])
-{
-	newtheta[0] = -theta[0];
-	for(uint8_t i = 1;i<6;i++)
-	{
-		newtheta[i] = theta[i];
-	}
-}
+//float newtheta[6];
+//void Get_transmittheta(float theta[6])
+//{
+//	newtheta[0] = -theta[0];
+//	for(uint8_t i = 1;i<6;i++)
+//	{
+//		newtheta[i] = theta[i];
+//	}
+//}
 /* ================= 从DH参数θ角得到电机位置 ================= */
 /**
  * @brief 将 DH 建模角度逆转换为原始传感器角度（电机/舵机）
@@ -419,28 +526,62 @@ void process_zdt_can_frame(uint16_t can_id, uint8_t *data, uint8_t len)
 	Get_theta(MotorCurrents, id - 1);
 }
 /* ================= 计算发送力矩 ================= */
-static void Update_All_Joint_Impedance(float dt_s)
+static void Update_All_Joint_Impedance(float dt_s, const float theta_ref[6], uint8_t pos_mode_enable)
 {
     uint8_t i;
+
     for (i = 0; i < JOINT_NUM; i++)
     {
-        /* 1) 更新关节位置和速度 */
+        /* 1) 更新测量 */
         JointImp_UpdateMeasurementWithVelocity(&g_joint_imp[i], theta[i], MotorCurrents[i].dq);
-        
-        /* 2) 写入重力补偿 */
+
+        /* 2) 重力补偿 */
         JointImp_SetGravityTorque(&g_joint_imp[i], tau[i]);
-        
-        /* 3) 设置参考位置（目标关节角度），参考速度设为0（静止目标） */
-//        JointImp_SetReference(&g_joint_imp[i], g_theta_des[i], 0.0f);   
-        
-        /* 4) 额外前馈 */
-        JointImp_SetFeedforwardTorque(&g_joint_imp[i], 0.0f);
-        
-        /* 5) 计算最终关节力矩 */
-        if (i != 1)  // 关节2（索引1）是MIT电机，独立处理
+
+        /* 3) 参考角：
+              - 位置模式：跟 g_theta_des
+              - 非位置模式：锁当前角 */
+        if ((pos_mode_enable == 1U) && (theta_ref != 0))
         {
-            g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
+            JointImp_SetReference(&g_joint_imp[i], theta_ref[i], 0.0f);
         }
+        else
+        {
+            JointImp_SetReference(&g_joint_imp[i], theta[i], 0.0f);
+        }
+
+        /* 4) 额外前馈清零 */
+        JointImp_SetFeedforwardTorque(&g_joint_imp[i], 0.0f);
+
+        /* 5) 关节2（索引1）单独走 MIT 的位置/速度/Kp/Kd/前馈接口 */
+		if (i == 1U)
+		{
+			if ((pos_mode_enable == 1U) && (theta_ref != 0))
+			{
+				/* 按键按下：才走位置模式，且保留限速 */
+				g_mit_pos_cmd = -g_joint_imp[i].q_ref;
+
+				g_mit_vel_cmd = 0.0f;
+				g_mit_kp_cmd  = g_joint_imp[i].cfg.kp;
+				g_mit_kd_cmd  = g_joint_imp[i].cfg.kd;
+				g_mit_ff_cmd  = clampf_local(tau[i] * TAU_MAP_PARAM2, -9.6f, 9.6f);
+			}
+			else
+			{
+				/* 没按键：直接贴当前角，不要限速追踪 */
+				g_mit_pos_cmd = 0;
+				g_mit_vel_cmd = 0;
+				g_mit_kp_cmd  = 0;   // 先彻底关掉位置刚度
+				g_mit_kd_cmd  = 0.3f;   // 先关掉阻尼
+				g_mit_ff_cmd  = clampf_local(tau[i] * TAU_MAP_PARAM2, -9.6f, 9.6f);
+			}
+
+			g_tau_cmd[i] = 0.0f;
+			continue;
+		}
+
+        /* 6) 其他关节走“外部阻抗 -> 力矩 -> ZDT发送” */
+        g_tau_cmd[i] = JointImp_ComputeTorque(&g_joint_imp[i], dt_s);
     }
 }
 /**
@@ -451,7 +592,6 @@ static void Update_All_Joint_Impedance(float dt_s)
   */
 void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
 {
-	// 设置方向
     for(uint8_t i = 0; i < 6; i++)
     {
         if(tauqe[i] >= 0)
@@ -459,19 +599,21 @@ void calc_send_torque(uint16_t* send_tauqe, float * tauqe)
         else
             MotorCurrents[i].dir = 0;
     }
-	// 关节2（索引2）对应MIT电机，力矩单独处理
-	send_tau_mit = tau[1]*TAU_MAP_PARAM2;
-	if(send_tau_mit > 9.6f)send_tau_mit = 9.6f;
-	else if(send_tau_mit < -9.6f)send_tau_mit = -9.6f;
-	// 其余关节
-	send_tauqe[0] = (uint16_t)(fabsf(tauqe[0]) * TAU_MAP_PARAM1);
+
+    /* 关节1(MIT)不在这里做总电流映射，它走 CAN_cmd_MIT(pos,vel,kp,kd,ff) */
+
+    send_tauqe[0] = (uint16_t)(fabsf(tauqe[0]) * TAU_MAP_PARAM1);
     send_tauqe[0] = Limite_tauqe(send_tauqe[0], 2500, 0);
+
     send_tauqe[2] = (uint16_t)(fabsf(tauqe[2]) * TAU_MAP_PARAM3);
-    send_tauqe[2] = Limite_tauqe(send_tauqe[2], 2500, 0);   // 接收返回值
+    send_tauqe[2] = Limite_tauqe(send_tauqe[2], 2500, 0);
+
     send_tauqe[3] = (uint16_t)(fabsf(tauqe[3]) * TAU_MAP_PARAM4);
     send_tauqe[3] = Limite_tauqe(send_tauqe[3], 2000, 0);
+
     send_tauqe[4] = (uint16_t)(fabsf(tauqe[4]) * TAU_MAP_PARAM5);
     send_tauqe[4] = Limite_tauqe(send_tauqe[4], 2000, 0);
+
     send_tauqe[5] = (uint16_t)(fabsf(tauqe[5]) * TAU_MAP_PARAM6);
     send_tauqe[5] = Limite_tauqe(send_tauqe[5], 1000, 0);
 }
@@ -585,52 +727,94 @@ void Servo_Task(void)
 
 void Robot_Task(void)
 {
-	//*运动学解算*/
-	// 1. 计算当前工具末端位姿
-	Get_transmittheta(theta);
-	compute_tool_pose(newtheta, T_tool_cur);
-	// 2. 计算工具末端位姿相对工具坐标系变换后相对基座坐标系的齐次变换矩阵
-	tool_relative_transform(T_tool_cur, T_tool_des, T_new);   // T_new 是基座下的新期望位姿
-    // 3. 计算目标关节角度（通过转换后的新位姿）
-    if (compute_desired_joint_angles(T_new, theta, g_theta_des)) {
-		test_flag = 1;
-		dh_to_original(g_theta_des, raw_angles);
-        // 成功，目标关节角度已存入 g_theta_des
-		// 对目标角度进行关节限幅（使用与当前角度相同的限幅值）
-//        LIMIT(g_theta_des[0], -PI/2, PI/2);
-//        LIMIT(g_theta_des[1], -PI/2, PI/2);
-//        LIMIT(g_theta_des[2], -11*PI/12, -PI/4);
-//        LIMIT(g_theta_des[3], -PI, PI);
-//        LIMIT(g_theta_des[4], -2*PI/3, 2*PI/3);
-//        LIMIT(g_theta_des[5], -2*PI/3, 2*PI/3);
-    } else {
-		test_flag = 0;
-        // 无解，保持当前控制或发出警告
-    }
+	
 
-    
+	
 
-	/*阻抗控制*/
-    // 计算每个关节的角速度
+    /* 1) 当前工具位姿 */
+    compute_tool_pose(theta, T_tool_cur);
+	#if !only_gravity
+    /* 2) 更新位置模式状态 */
+    Update_Position_Mode_From_Key();
+
+    /* 3) 默认目标角 = 当前角 */
     for (uint8_t i = 0; i < JOINT_NUM; i++)
     {
-        // 获取最新的关节角度
+        g_theta_des[i] = theta[i];
+    }
+
+    /* 4) 仅在位置模式下做 IK */
+    if ((g_pos_mode_enable == 1U) && (g_have_goal == 1U))
+    {
+        if (compute_desired_joint_angles(T_tool_goal, theta, g_theta_des))
+        {
+            test_flag = 1;
+        }
+        else
+        {
+            test_flag = 0;
+            g_pos_mode_enable = 0U;
+            Hold_Current_Pose();
+
+            for (uint8_t i = 0; i < JOINT_NUM; i++)
+            {
+                g_theta_des[i] = theta[i];
+            }
+        }
+    }
+    else
+    {
+        test_flag = 0;
+    }
+	#else 
+	/* 纯重力补偿模式：不做按键位置模式、不做IK、不做低通、不做阻抗位置跟踪 */
+	/* 2) 强制关闭位置模式/IK，只保留阻尼+重力补偿 */
+	g_pos_mode_enable = 0U;
+	g_have_goal = 0U;
+	test_flag = 0;
+
+	/* 参考角直接取当前角，后面阻抗控制里就只剩阻尼项 */
+	for (uint8_t i = 0; i < JOINT_NUM; i++)
+	{
+		g_theta_des[i] = theta[i];
+	}
+	#endif
+    /* 5) 角速度差分 */
+    for (uint8_t i = 0; i < JOINT_NUM; i++)
+    {
         float theta_now = theta[i];
-        // 基于差分法计算角速度
-        float dq = (theta_now - MotorCurrents[i].theta_prev) / (ROBOT_TASK_PERIOD_S);  // xPeriod为任务周期
+        float dq = (theta_now - MotorCurrents[i].theta_prev) / ROBOT_TASK_PERIOD_S;
 
-        // 更新上次的关节角度
         MotorCurrents[i].theta_prev = theta_now;
-
-        // 存储计算得到的角速度
         MotorCurrents[i].dq = dq;
     }
-	// 计算并发送力矩指令
-    Update_All_Joint_Impedance(ROBOT_TASK_PERIOD_S);  // 将周期转换为秒
-	// 计算发送力矩值
-	calc_send_torque(send_tau,g_tau_cmd);
-	//发送力矩
-	Set_Taget_Torque();
+
+        /* 6) 对目标角做一阶低通
+          - 位置模式：缓慢靠近 IK 目标
+          - 非位置模式：直接贴回当前角 */
+    if (g_pos_mode_enable == 1U)
+    {
+        LowPass_Target_Ref(g_theta_des, g_theta_ref_lpf, FILTER_ALPHA);
+    }
+    else
+    {
+        for (uint8_t i = 0; i < JOINT_NUM; i++)
+        {
+            g_theta_ref_lpf[i] = theta[i];
+        }
+    }
+
+    /* 7) 控制更新
+          这里关节1也会跟 g_theta_ref_lpf[1]，
+          只是它的发送方式单独走 MIT 接口 */
+    Update_All_Joint_Impedance(ROBOT_TASK_PERIOD_S, g_theta_ref_lpf, g_pos_mode_enable);
+
+    /* 8) 其余关节映射成发送值 */
+    calc_send_torque(send_tau, g_tau_cmd);
+
+    /* 9) 发命令 */
+    Set_Taget_Torque();
+
 }
 
 #endif
@@ -661,26 +845,38 @@ void Read_zdt_Pos(void)
   */
 void Set_Taget_Torque(void)
 {
-	#if !debug		//正常发送补偿力矩
-	
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 15000,send_tau[0],0);//1为顺时针
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.03, send_tau_mit);
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000,send_tau[2],0);//1为顺时针
-	
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 15000,send_tau[3],0);//1为顺时针
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 25000,send_tau[4],0);
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 15000,send_tau[5],0);
-	#endif
-	
-	#if debug		//发送0力矩
-	
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 10,10,0);//1为顺时针
-	CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0.12, 0);
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 10,10,0);//1为顺时针
+#if !debug
 
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 10,10,0);//1为顺时针
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 10,10,0);
-	USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 10,10,0);
-	#endif
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 15000, send_tau[0], 0);
+
+    /* 关节2（索引1）：
+       位置/速度/Kp/Kd/前馈 分开发给 MIT 控制器 */
+    CAN_cmd_MIT(&hfdcan2,
+                0x02,
+                g_mit_pos_cmd,
+                g_mit_vel_cmd,
+                g_mit_kp_cmd,
+                g_mit_kd_cmd,
+                g_mit_ff_cmd);
+
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000, send_tau[2], 0);
+
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 15000, send_tau[3], 0);
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 25000, send_tau[4], 0);
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 15000, send_tau[5], 0);
+
+#endif
+
+#if debug
+
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 1, MotorCurrents[0].dir, 10, 10, 0);
+    CAN_cmd_MIT(&hfdcan2, 0x02, 0, 0, 0, 0, 0);
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 10, 10, 0);
+
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 4, MotorCurrents[3].dir, 10, 10, 0);
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 5, MotorCurrents[4].dir, 10, 10, 0);
+    USER_ZDT_X42_V2_Torque_Control(&hfdcan1, 6, MotorCurrents[5].dir, 10, 10, 0);
+
+#endif
 }
 #endif

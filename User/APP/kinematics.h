@@ -7,7 +7,7 @@
 #define KIN_PI  3.141592653589793f
 
 /* 工具末端相对于关节6坐标系的偏移（沿z轴正向） */
-#define TOOL_OFFSET_Z -0.08f   // 单位：米
+#define TOOL_OFFSET_Z 0.08f   // 单位：米
 
 /**
  * 正运动学：计算从基座到指定关节的齐次变换矩阵

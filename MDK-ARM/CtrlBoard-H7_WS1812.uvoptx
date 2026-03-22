@@ -328,7 +328,27 @@
         <Ww>
           <count>33</count>
           <WinNumber>1</WinNumber>
-          <ItemText>newtheta,0x0A</ItemText>
+          <ItemText>T_new</ItemText>
+        </Ww>
+        <Ww>
+          <count>34</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>\\CtrlBoard_H7_WS1812\../User/APP/servo_mapping.c\send_tau_mit</ItemText>
+        </Ww>
+        <Ww>
+          <count>35</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>T_new</ItemText>
+        </Ww>
+        <Ww>
+          <count>36</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>g_mit_pos_cmd,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>37</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>g_mit_ff_cmd,0x0A</ItemText>
         </Ww>
       </WatchWindow1>
       <WatchWindow2>

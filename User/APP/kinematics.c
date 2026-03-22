@@ -1,328 +1,532 @@
 #include "kinematics.h"
 
-// 机械臂的改进DH参数（与重力补偿模块一致）
+/* 机械臂的改进 DH 参数（与重力补偿模块一致） */
 static const float DH_a[6] = {
     0.0f,
-	0.0f,
-	0.130f,
-	0.0f,
-	0.0f,
-	0.0f
-};
-static const float DH_alpha[6] = {
     0.0f,
-	-90.0f * KIN_PI / 180.0f,
-	0.0f,
-    -90.0f * KIN_PI / 180.0f,
-	90.0f * KIN_PI / 180.0f,
-    -90.0f * KIN_PI / 180.0f
-};
-static const float DH_d[6] = {
+    0.130f,
     0.0f,
-	0.042f,
-	0.0f,
-	0.115f,
-	0.0f,
-	0.0f
+    0.0f,
+    0.0f
 };
 
-// 关节2的垂直偏移（与DH_d[1]相同，用于几何公式）
+static const float DH_alpha[6] = {
+    0.0f,
+    -90.0f * KIN_PI / 180.0f,
+    0.0f,
+    -90.0f * KIN_PI / 180.0f,
+    90.0f * KIN_PI / 180.0f,
+    -90.0f * KIN_PI / 180.0f
+};
+
+static const float DH_d[6] = {
+    0.0f,
+    0.042f,
+    0.0f,
+    0.115f,
+    0.0f,
+    0.0f
+};
+
+/* 为解析逆解单独保留的几何参数 */
 static const float d2 = 0.042f;
 static const float a2 = 0.130f;
 static const float d3 = 0.115f;
 
-/* ------------------------ 辅助矩阵生成函数 ------------------------ */
-// 辅助函数：矩阵乘法（4x4）
-static void mat_mul44(const float A[16], const float B[16], float C[16]) {
+/* alpha 是常量，预计算三角函数 */
+static const float DH_ca[6] = {
+    1.0f,   /* cos(0)     */
+    0.0f,   /* cos(-pi/2) */
+    1.0f,   /* cos(0)     */
+    0.0f,   /* cos(-pi/2) */
+    0.0f,   /* cos(pi/2)  */
+    0.0f    /* cos(-pi/2) */
+};
+
+static const float DH_sa[6] = {
+    0.0f,   /* sin(0)     */
+   -1.0f,   /* sin(-pi/2) */
+    0.0f,   /* sin(0)     */
+   -1.0f,   /* sin(-pi/2) */
+    1.0f,   /* sin(pi/2)  */
+   -1.0f    /* sin(-pi/2) */
+};
+
+/* ------------------------ 辅助函数 ------------------------ */
+
+static float wrap_pi(float x)
+{
+    while (x > KIN_PI)  x -= 2.0f * KIN_PI;
+    while (x < -KIN_PI) x += 2.0f * KIN_PI;
+    return x;
+}
+
+/* 把 angle 映射到与 ref 最接近的 2pi 等价分支 */
+static float nearest_equiv(float angle, float ref)
+{
+    while (angle - ref > KIN_PI)  angle -= 2.0f * KIN_PI;
+    while (angle - ref < -KIN_PI) angle += 2.0f * KIN_PI;
+    return angle;
+}
+
+static float clampf_ik(float x, float lo, float hi)
+{
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
+
+/* 4x4矩阵乘法：C = A * B，行主序 */
+static void mat_mul44(const float A[16], const float B[16], float C[16])
+{
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
-            C[i*4 + j] = A[i*4+0]*B[0*4+j] + A[i*4+1]*B[1*4+j] +
-                         A[i*4+2]*B[2*4+j] + A[i*4+3]*B[3*4+j];
+            C[i * 4 + j] =
+                A[i * 4 + 0] * B[0 * 4 + j] +
+                A[i * 4 + 1] * B[1 * 4 + j] +
+                A[i * 4 + 2] * B[2 * 4 + j] +
+                A[i * 4 + 3] * B[3 * 4 + j];
         }
     }
 }
-/* 生成平移矩阵 */
-void make_translation_matrix(float dx, float dy, float dz, float T_rel[16]) {
-    // 初始化为单位矩阵
-    for (int i = 0; i < 16; i++) T_rel[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+
+/* 仅由前三关节计算 R03，严格匹配当前 FK */
+static void calc_R03_from_theta123(float t1, float t2, float t3, float R03[9])
+{
+    float c1  = cosf(t1);
+    float s1  = sinf(t1);
+    float c23 = cosf(t2 + t3);
+    float s23 = sinf(t2 + t3);
+
+    /* row-major */
+    R03[0] =  c1 * c23;   R03[1] = -c1 * s23;   R03[2] = -s1;
+    R03[3] =  s1 * c23;   R03[4] = -s1 * s23;   R03[5] =  c1;
+    R03[6] = -s23;        R03[7] = -c23;        R03[8] =  0.0f;
+}
+
+/* Rout = Rleft^T * Rright，3x3，row-major */
+static void mat3_mul_transpose_left(const float Rleft[9], const float Rright[9], float Rout[9])
+{
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            Rout[r * 3 + c] =
+                Rleft[0 * 3 + r] * Rright[0 * 3 + c] +
+                Rleft[1 * 3 + r] * Rright[1 * 3 + c] +
+                Rleft[2 * 3 + r] * Rright[2 * 3 + c];
+        }
+    }
+}
+
+/**
+ * 根据期望的工具末端位姿，计算腕心（关节6原点）位姿
+ * T_tool_des:  工具末端位姿
+ * T_wrist_des: 腕心位姿
+ */
+static void tool_to_wrist(const float T_tool_des[16], float T_wrist_des[16])
+{
+    /* 先复制旋转部分和最后一行 */
+    for (int i = 0; i < 16; i++) {
+        T_wrist_des[i] = T_tool_des[i];
+    }
+
+    /* 工具相对腕心沿局部 z 正方向偏移 TOOL_OFFSET_Z */
+    float offset_local[3] = {0.0f, 0.0f, TOOL_OFFSET_Z};
+    float offset_global[3];
+
+    offset_global[0] = T_tool_des[0] * offset_local[0] + T_tool_des[1] * offset_local[1] + T_tool_des[2]  * offset_local[2];
+    offset_global[1] = T_tool_des[4] * offset_local[0] + T_tool_des[5] * offset_local[1] + T_tool_des[6]  * offset_local[2];
+    offset_global[2] = T_tool_des[8] * offset_local[0] + T_tool_des[9] * offset_local[1] + T_tool_des[10] * offset_local[2];
+
+    T_wrist_des[3]  = T_tool_des[3]  - offset_global[0];
+    T_wrist_des[7]  = T_tool_des[7]  - offset_global[1];
+    T_wrist_des[11] = T_tool_des[11] - offset_global[2];
+
+    T_wrist_des[12] = 0.0f;
+    T_wrist_des[13] = 0.0f;
+    T_wrist_des[14] = 0.0f;
+    T_wrist_des[15] = 1.0f;
+}
+
+/* ------------------------ 相对变换矩阵生成 ------------------------ */
+
+void make_translation_matrix(float dx, float dy, float dz, float T_rel[16])
+{
+    for (int i = 0; i < 16; i++) {
+        T_rel[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+    }
     T_rel[3]  = dx;
     T_rel[7]  = dy;
     T_rel[11] = dz;
 }
-/* 生成绕X轴旋转矩阵 */
-void make_rotation_x(float angle, float T_rel[16]) {
-    float c = cosf(angle), s = sinf(angle);
+
+void make_rotation_x(float angle, float T_rel[16])
+{
+    float c = cosf(angle);
+    float s = sinf(angle);
+
     for (int i = 0; i < 16; i++) T_rel[i] = 0.0f;
-    T_rel[0] = 1; T_rel[5] = c; T_rel[6] = -s;
-    T_rel[9] = s; T_rel[10] = c; T_rel[15] = 1;
-}
-/* 生成绕Y轴旋转矩阵 */
-void make_rotation_y(float angle, float T_rel[16]) {
-    float c = cosf(angle), s = sinf(angle);
-    for (int i = 0; i < 16; i++) T_rel[i] = 0.0f;
-    T_rel[0] = c; T_rel[2] = s; T_rel[5] = 1;
-    T_rel[8] = -s; T_rel[10] = c; T_rel[15] = 1;
-}
-/* 生成绕Z轴旋转矩阵 */
-void make_rotation_z(float angle, float T_rel[16]) {
-    float c = cosf(angle), s = sinf(angle);
-    for (int i = 0; i < 16; i++) T_rel[i] = 0.0f;
-    T_rel[0] = c; T_rel[1] = -s; T_rel[4] = s; T_rel[5] = c;
-    T_rel[10] = 1; T_rel[15] = 1;
+
+    T_rel[0]  = 1.0f;
+    T_rel[5]  = c;
+    T_rel[6]  = -s;
+    T_rel[9]  = s;
+    T_rel[10] = c;
+    T_rel[15] = 1.0f;
 }
 
+void make_rotation_y(float angle, float T_rel[16])
+{
+    float c = cosf(angle);
+    float s = sinf(angle);
 
-// 正运动学：计算从基座到关节joint的齐次变换矩阵
-void forward_kinematics(const float theta[6], int joint, float T[16]) {
-    // 初始化基座坐标系为单位阵
-    for (int i = 0; i < 16; i++) T[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+    for (int i = 0; i < 16; i++) T_rel[i] = 0.0f;
+
+    T_rel[0]  = c;
+    T_rel[2]  = s;
+    T_rel[5]  = 1.0f;
+    T_rel[8]  = -s;
+    T_rel[10] = c;
+    T_rel[15] = 1.0f;
+}
+
+void make_rotation_z(float angle, float T_rel[16])
+{
+    float c = cosf(angle);
+    float s = sinf(angle);
+
+    for (int i = 0; i < 16; i++) T_rel[i] = 0.0f;
+
+    T_rel[0]  = c;
+    T_rel[1]  = -s;
+    T_rel[4]  = s;
+    T_rel[5]  = c;
+    T_rel[10] = 1.0f;
+    T_rel[15] = 1.0f;
+}
+
+/* ------------------------ 正运动学 ------------------------ */
+
+void forward_kinematics(const float theta[6], int joint, float T[16])
+{
+    for (int i = 0; i < 16; i++) {
+        T[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+    }
 
     float T_prev[16];
-    for (int i = 0; i < 16; i++) T_prev[i] = T[i];
+    for (int i = 0; i < 16; i++) {
+        T_prev[i] = T[i];
+    }
 
     for (int i = 0; i < joint; i++) {
         float ct = cosf(theta[i]);
         float st = sinf(theta[i]);
-        float ca = cosf(DH_alpha[i]);
-        float sa = sinf(DH_alpha[i]);
+        float ca = DH_ca[i];
+        float sa = DH_sa[i];
 
-        // 改进D-H变换矩阵 A_i
+        /* 改进 DH 变换矩阵 */
         float A_i[16] = {
-            ct,      -st,      0,      DH_a[i],
-            st*ca,   ct*ca,   -sa,   -DH_d[i]*sa,
-            st*sa,   ct*sa,   ca,     DH_d[i]*ca,
-            0,       0,       0,      1
+            ct,      -st,      0.0f,    DH_a[i],
+            st * ca,  ct * ca, -sa,    -DH_d[i] * sa,
+            st * sa,  ct * sa,  ca,     DH_d[i] * ca,
+            0.0f,     0.0f,     0.0f,   1.0f
         };
 
         float T_curr[16];
         mat_mul44(T_prev, A_i, T_curr);
-        for (int j = 0; j < 16; j++) T_prev[j] = T_curr[j];
+
+        for (int j = 0; j < 16; j++) {
+            T_prev[j] = T_curr[j];
+        }
     }
 
-    // 复制结果
-    for (int i = 0; i < 16; i++) T[i] = T_prev[i];
+    for (int i = 0; i < 16; i++) {
+        T[i] = T_prev[i];
+    }
 }
 
-// 逆运动学主函数
-int inverse_kinematics_puma(const float T_target[16], const float theta_cur[6], float theta_out[6]) {
-    // 提取末端位置和旋转矩阵
-    float px = T_target[3];
-    float py = T_target[7];
-    float pz = T_target[11];
+/* ------------------------ 解析逆运动学 ------------------------ */
 
-    float R06[9] = {
-        T_target[0], T_target[1], T_target[2],
-        T_target[4], T_target[5], T_target[6],
-        T_target[8], T_target[9], T_target[10]
+int inverse_kinematics_puma(const float T_target[16], const float theta_cur[6], float theta_out[6])
+{
+    const float px = T_target[3];
+    const float py = T_target[7];
+    const float pz = T_target[11];
+
+    const float R06[9] = {
+        T_target[0],  T_target[1],  T_target[2],
+        T_target[4],  T_target[5],  T_target[6],
+        T_target[8],  T_target[9],  T_target[10]
     };
 
-    // 腕心位置（d6=0）
-    float Pw[3] = {px, py, pz};
-
-    // 用于存储多解
-    float solutions[8][6];  // 最多8组解
+    /* 最多 2(肩) * 2(肘) * 2(腕) = 8 组解 */
+    float solutions[8][6];
     int sol_count = 0;
 
-    // 计算关节1的两个可能值
-    float theta1_vals[2];
-    theta1_vals[0] = atan2f(py, px);
-    theta1_vals[1] = theta1_vals[0] + KIN_PI;
+    /*
+     * 对应当前 FK 的前三轴位置关系：
+     *
+     * x = -d2*sin(t1) + cos(t1) * (a2*cos(t2) - d3*sin(t2+t3))
+     * y =  d2*cos(t1) + sin(t1) * (a2*cos(t2) - d3*sin(t2+t3))
+     * z = -a2*sin(t2) - d3*cos(t2+t3)
+     *
+     * 令:
+     * q = cos(t1)*x + sin(t1)*y = a2*cos(t2) - d3*sin(t2+t3)
+     * v = -z = a2*sin(t2) + d3*cos(t2+t3)
+     *
+     * 且:
+     * -sin(t1)*x + cos(t1)*y = d2
+     *
+     * 所以 theta1 不能直接 atan2(py, px)，必须把 d2 的侧偏算进去。
+     */
 
-    for (int i1 = 0; i1 < 2; i1++) {
-        float theta1 = theta1_vals[i1];
+    float r_xy = sqrtf(px * px + py * py);
+    if (r_xy < fabsf(d2) - 1e-6f) {
+        return 0;
+    }
+
+    float q_abs_sq = r_xy * r_xy - d2 * d2;
+    if (q_abs_sq < 0.0f && q_abs_sq > -1e-8f) q_abs_sq = 0.0f;
+    if (q_abs_sq < 0.0f) return 0;
+
+    float q_abs = sqrtf(q_abs_sq);
+    float phi = atan2f(py, px);
+
+    float q_candidates[2] = { q_abs, -q_abs };
+
+    for (int ishoulder = 0; ishoulder < 2; ishoulder++) {
+        float q_nom = q_candidates[ishoulder];
+
+        /*
+         * 由：
+         * q  =  cos(t1)*px + sin(t1)*py
+         * d2 = -sin(t1)*px + cos(t1)*py
+         * 得：
+         * theta1 = atan2(py, px) - atan2(d2, q)
+         */
+        float theta1 = wrap_pi(phi - atan2f(d2, q_nom));
+
         float c1 = cosf(theta1);
         float s1 = sinf(theta1);
-        // 计算R = px/c1 或 py/s1，避免除以零
-        float R;
-        if (fabsf(c1) > KIN_EPS) R = px / c1;
-        else if (fabsf(s1) > KIN_EPS) R = py / s1;
-        else continue;  // 奇异
 
-        float s = pz - d2;  // z坐标偏移
+        /* 用求出的 theta1 反算 q，更稳 */
+        float q = c1 * px + s1 * py;
+        float v = -pz;
 
-        // 计算D = (R^2 + s^2 - a2^2 - d3^2) / (2*a2*d3)
-        float D = (R*R + s*s - a2*a2 - d3*d3) / (2.0f * a2 * d3);
-        if (fabsf(D) > 1.0f + KIN_EPS) continue;  // 无解
-        if (D > 1.0f) D = 1.0f;
-        if (D < -1.0f) D = -1.0f;
+        /*
+         * q = a2*cos(t2) - d3*sin(t2+t3)
+         * v = a2*sin(t2) + d3*cos(t2+t3)
+         *
+         * 推得：
+         * q^2 + v^2 = a2^2 + d3^2 - 2*a2*d3*sin(t3)
+         *
+         * ==> sin(t3) = (a2^2 + d3^2 - q^2 - v^2) / (2*a2*d3)
+         */
+        float s3 = (a2 * a2 + d3 * d3 - q * q - v * v) / (2.0f * a2 * d3);
 
-        // 关节3的两个可能值
-        float theta3_vals[2];
-        float s3_sqrt = sqrtf(1.0f - D*D);
-        theta3_vals[0] = atan2f( s3_sqrt, D);   // 肘部向上
-        theta3_vals[1] = atan2f(-s3_sqrt, D);   // 肘部向下
+        if (s3 < -1.0f - 1e-5f || s3 > 1.0f + 1e-5f) {
+            continue;
+        }
+        s3 = clampf_ik(s3, -1.0f, 1.0f);
 
-        for (int i3 = 0; i3 < 2; i3++) {
-            float theta3 = theta3_vals[i3];
-            float c3 = cosf(theta3);
-            float s3 = sinf(theta3);
+        float c3_abs_sq = 1.0f - s3 * s3;
+        if (c3_abs_sq < 0.0f && c3_abs_sq > -1e-8f) c3_abs_sq = 0.0f;
+        if (c3_abs_sq < 0.0f) continue;
 
-            // 计算关节2
-            float numerator   = (d3*c3 + a2)*s - d3*s3*R;
-            float denominator = (d3*c3 + a2)*R + d3*s3*s;
-            float theta2 = atan2f(numerator, denominator);
+        float c3_abs = sqrtf(c3_abs_sq);
+        float c3_candidates[2] = { c3_abs, -c3_abs };
 
-            // 前三关节角度
-            float theta123[3] = {theta1, theta2, theta3};
+        for (int ielbow = 0; ielbow < 2; ielbow++) {
+            float c3 = c3_candidates[ielbow];
+            float theta3 = wrap_pi(atan2f(s3, c3));
 
-            // 计算前三关节的变换矩阵，得到R03
-            float T03[16];
-            forward_kinematics(theta123, 3, T03);
-            float R03[9] = {
-                T03[0], T03[1], T03[2],
-                T03[4], T03[5], T03[6],
-                T03[8], T03[9], T03[10]
-            };
+            /*
+             * [q, v]^T = Rot(t2) * [A, B]^T
+             * A = a2 - d3*sin(t3)
+             * B = d3*cos(t3)
+             *
+             * ==> theta2 = atan2(v, q) - atan2(B, A)
+             */
+            float A = a2 - d3 * s3;
+            float B = d3 * c3;
+            float theta2 = wrap_pi(atan2f(v, q) - atan2f(B, A));
 
-            // 计算R36 = R03^T * R06
+            /* 算 R36 = R03^T * R06 */
+            float R03[9];
             float R36[9];
-            for (int r = 0; r < 3; r++) {
-                for (int c = 0; c < 3; c++) {
-                    R36[r*3 + c] = R03[0*3 + r]*R06[0*3 + c] +
-                                   R03[1*3 + r]*R06[1*3 + c] +
-                                   R03[2*3 + r]*R06[2*3 + c];
+            calc_R03_from_theta123(theta1, theta2, theta3, R03);
+            mat3_mul_transpose_left(R03, R06, R36);
+
+            /*
+             * 当前 DH 下腕部旋转矩阵可写为：
+             *
+             * [ -s4*s6 + c4*c5*c6,   -s4*c6 - c4*c5*s6,   -c4*s5 ]
+             * [        s5*c6,               -s5*s6,          c5    ]
+             * [ -s4*c5*c6 - c4*s6,    s4*c5*s6 - c4*c6,    s4*s5 ]
+             *
+             * 于是：
+             * theta4 = atan2(r33, -r13)
+             * theta5 = atan2(±sqrt(r13^2 + r33^2), r23)
+             * theta6 = atan2(-r22, r21)
+             */
+
+            float r11 = R36[0];
+            float r12 = R36[1];
+            float r13 = R36[2];
+            float r21 = R36[3];
+            float r22 = R36[4];
+            float r23 = R36[5];
+            float r31 = R36[6];
+            float r32 = R36[7];
+            float r33 = R36[8];
+
+            (void)r11;
+            (void)r31;
+            (void)r32;
+
+            float s5_abs = sqrtf(r13 * r13 + r33 * r33);
+
+            if (s5_abs > 1e-6f) {
+                float theta4_a = wrap_pi(atan2f(r33, -r13));
+                float theta5_a = wrap_pi(atan2f(s5_abs, r23));
+                float theta6_a = wrap_pi(atan2f(-r22, r21));
+
+                if (sol_count < 8) {
+                    solutions[sol_count][0] = theta1;
+                    solutions[sol_count][1] = theta2;
+                    solutions[sol_count][2] = theta3;
+                    solutions[sol_count][3] = theta4_a;
+                    solutions[sol_count][4] = theta5_a;
+                    solutions[sol_count][5] = theta6_a;
+                    sol_count++;
                 }
-            }
 
-            // 解腕关节
-            float s5 = sqrtf(R36[0*3+2]*R36[0*3+2] + R36[1*3+2]*R36[1*3+2]);
-            float theta4, theta5, theta6;
-
-            if (s5 > KIN_EPS) {
-                theta5 = atan2f(s5, R36[2*3+2]);
-                theta4 = atan2f(R36[1*3+2] / s5, R36[0*3+2] / s5);
-                theta6 = atan2f(-R36[2*3+1] / s5, R36[2*3+0] / s5);
+                if (sol_count < 8) {
+                    solutions[sol_count][0] = theta1;
+                    solutions[sol_count][1] = theta2;
+                    solutions[sol_count][2] = theta3;
+                    solutions[sol_count][3] = wrap_pi(theta4_a + KIN_PI);
+                    solutions[sol_count][4] = wrap_pi(-theta5_a);
+                    solutions[sol_count][5] = wrap_pi(theta6_a + KIN_PI);
+                    sol_count++;
+                }
             } else {
-                // 奇异情况（θ5 = 0 或 π）
-                theta5 = (R36[2*3+2] > 0) ? 0.0f : KIN_PI;
-                theta4 = 0.0f;  // 可以任意设定
-                theta6 = atan2f(R36[1*3+0], R36[0*3+0]);
-            }
+                /* 腕部奇异：s5 ≈ 0 */
+                float theta4 = 0.0f;
+                float theta5;
+                float theta6;
 
-            // 存储解（实际关节角度，无偏置）
-            solutions[sol_count][0] = theta1;
-            solutions[sol_count][1] = theta2;
-            solutions[sol_count][2] = theta3;
-            solutions[sol_count][3] = theta4;
-            solutions[sol_count][4] = theta5;
-            solutions[sol_count][5] = theta6;
-            sol_count++;
+                if (r23 >= 0.0f) {
+                    /* theta5 ≈ 0，此时只剩 theta4 + theta6 */
+                    theta5 = 0.0f;
+                    theta6 = wrap_pi(atan2f(-r12, r11));
+                } else {
+                    /* theta5 ≈ pi，此时只剩 theta4 - theta6 */
+                    theta5 = KIN_PI;
+                    theta6 = wrap_pi(atan2f(r12, -r11));
+                }
 
-            // 第二组腕关节解（θ5取π-θ5，θ4和θ6相应改变）
-            if (s5 > KIN_EPS) {
-                theta5 = atan2f(s5, -R36[2*3+2]);
-                theta4 = atan2f(R36[1*3+2] / s5, -R36[0*3+2] / s5);
-                theta6 = atan2f(R36[2*3+1] / s5, -R36[2*3+0] / s5);
-                solutions[sol_count][0] = theta1;
-                solutions[sol_count][1] = theta2;
-                solutions[sol_count][2] = theta3;
-                solutions[sol_count][3] = theta4;
-                solutions[sol_count][4] = theta5;
-                solutions[sol_count][5] = theta6;
-                sol_count++;
+                if (sol_count < 8) {
+                    solutions[sol_count][0] = theta1;
+                    solutions[sol_count][1] = theta2;
+                    solutions[sol_count][2] = theta3;
+                    solutions[sol_count][3] = theta4;
+                    solutions[sol_count][4] = theta5;
+                    solutions[sol_count][5] = theta6;
+                    sol_count++;
+                }
             }
         }
     }
 
-    if (sol_count == 0) return 0;  // 无解
+    if (sol_count == 0) {
+        return 0;
+    }
 
-    // 从所有解中选择最接近当前关节角度的解
+    /* 选与当前关节角最接近的那组：按当前所在 2pi 分支比较 */
     int best_idx = 0;
-    float min_diff = 1e9f;
+    float min_cost = 1e30f;
+
     for (int i = 0; i < sol_count; i++) {
-        float diff = 0.0f;
+        float cost = 0.0f;
         for (int j = 0; j < 6; j++) {
-            float d = fabsf(solutions[i][j] - theta_cur[j]);
-            // 考虑角度周期性，将差限制在 [-π, π]
-            d = fminf(d, 2.0f*KIN_PI - d);
-            diff += d;
+            float cand = nearest_equiv(solutions[i][j], theta_cur[j]);
+            float d = cand - theta_cur[j];
+            cost += fabsf(d);
         }
-        if (diff < min_diff) {
-            min_diff = diff;
+        if (cost < min_cost) {
+            min_cost = cost;
             best_idx = i;
         }
     }
 
-    // 输出最佳解
+    /* 输出时也贴到当前分支，不强行压回 [-pi, pi] */
     for (int j = 0; j < 6; j++) {
-        theta_out[j] = solutions[best_idx][j];
-        // 将角度归一化到 [-π, π]
-        while (theta_out[j] > KIN_PI) theta_out[j] -= 2.0f*KIN_PI;
-        while (theta_out[j] < -KIN_PI) theta_out[j] += 2.0f*KIN_PI;
+        theta_out[j] = nearest_equiv(solutions[best_idx][j], theta_cur[j]);
     }
 
     return 1;
 }
-/**
- * 根据期望的工具末端位姿，计算球腕中心（关节6原点）的位姿
- * @param T_tool_des  期望的工具末端位姿（16个元素，按行主序）
- * @param T_wrist_des 输出：球腕中心期望位姿（16个元素）
- */
-void tool_to_wrist(const float T_tool_des[16], float T_wrist_des[16]) {
-    // 复制旋转部分（前3x3）
-    for (int i = 0; i < 12; i++) T_wrist_des[i] = T_tool_des[i];
-    
-    // 计算球腕中心位置 = 工具位置 - 工具在基座下的偏移向量
-    // 工具偏移向量在基座下的表示 = R_tool * [0, 0, TOOL_OFFSET_Z]^T
-    float offset_local[3] = {0, 0, TOOL_OFFSET_Z};
-    float offset_global[3];
-    offset_global[0] = T_tool_des[0]*offset_local[0] + T_tool_des[1]*offset_local[1] + T_tool_des[2]*offset_local[2];
-    offset_global[1] = T_tool_des[4]*offset_local[0] + T_tool_des[5]*offset_local[1] + T_tool_des[6]*offset_local[2];
-    offset_global[2] = T_tool_des[8]*offset_local[0] + T_tool_des[9]*offset_local[1] + T_tool_des[10]*offset_local[2];
-    
-    T_wrist_des[3]  = T_tool_des[3]  - offset_global[0];
-    T_wrist_des[7]  = T_tool_des[7]  - offset_global[1];
-    T_wrist_des[11] = T_tool_des[11] - offset_global[2];
-    
-    // 最后一行保持 [0 0 0 1]
-    T_wrist_des[12] = 0; T_wrist_des[13] = 0; T_wrist_des[14] = 0; T_wrist_des[15] = 1;
-}
-/* ------------------------ 新增封装函数 ------------------------ */
-int compute_desired_joint_angles(const float T_tool_des[16], const float theta_cur[6], float theta_des[6]) {
+
+/* ------------------------ 封装接口 ------------------------ */
+
+int compute_desired_joint_angles(const float T_tool_des[16], const float theta_cur[6], float theta_des[6])
+{
     float T_wrist_des[16];
     tool_to_wrist(T_tool_des, T_wrist_des);
     return inverse_kinematics_puma(T_wrist_des, theta_cur, theta_des);
 }
 
-void compute_tool_pose(const float theta[6], float T_tool[16]) {
+void compute_tool_pose(const float theta[6], float T_tool[16])
+{
     float T_wrist[16];
-    forward_kinematics(theta, 6, T_wrist);   // 球腕中心位姿
+    forward_kinematics(theta, 6, T_wrist);
 
-    // 工具偏移在基座下的表示
-    float offset_local[3] = {0, 0, TOOL_OFFSET_Z};
+    float offset_local[3] = {0.0f, 0.0f, TOOL_OFFSET_Z};
     float offset_global[3];
-    offset_global[0] = T_wrist[0]*offset_local[0] + T_wrist[1]*offset_local[1] + T_wrist[2]*offset_local[2];
-    offset_global[1] = T_wrist[4]*offset_local[0] + T_wrist[5]*offset_local[1] + T_wrist[6]*offset_local[2];
-    offset_global[2] = T_wrist[8]*offset_local[0] + T_wrist[9]*offset_local[1] + T_wrist[10]*offset_local[2];
 
-    // 复制旋转部分
-    for (int i = 0; i < 12; i++) T_tool[i] = T_wrist[i];
-    // 位置 = 球腕中心位置 + 偏移
+    offset_global[0] = T_wrist[0] * offset_local[0] + T_wrist[1] * offset_local[1] + T_wrist[2]  * offset_local[2];
+    offset_global[1] = T_wrist[4] * offset_local[0] + T_wrist[5] * offset_local[1] + T_wrist[6]  * offset_local[2];
+    offset_global[2] = T_wrist[8] * offset_local[0] + T_wrist[9] * offset_local[1] + T_wrist[10] * offset_local[2];
+
+    for (int i = 0; i < 16; i++) {
+        T_tool[i] = T_wrist[i];
+    }
+
     T_tool[3]  = T_wrist[3]  + offset_global[0];
     T_tool[7]  = T_wrist[7]  + offset_global[1];
     T_tool[11] = T_wrist[11] + offset_global[2];
-    T_tool[12] = 0; T_tool[13] = 0; T_tool[14] = 0; T_tool[15] = 1;
+
+    T_tool[12] = 0.0f;
+    T_tool[13] = 0.0f;
+    T_tool[14] = 0.0f;
+    T_tool[15] = 1.0f;
 }
 
-/* ------------------------ 工具坐标系变换函数 ------------------------ */
-void tool_relative_transform(const float T_current[16], const float T_rel[16], float T_new[16]) {
+/* ------------------------ 工具坐标系相对变换 ------------------------ */
+
+void tool_relative_transform(const float T_current[16], const float T_rel[16], float T_new[16])
+{
     mat_mul44(T_current, T_rel, T_new);
 }
 
-void tool_relative_translate(const float T_current[16], float dx, float dy, float dz, float T_new[16]) {
+void tool_relative_translate(const float T_current[16], float dx, float dy, float dz, float T_new[16])
+{
     float T_rel[16];
     make_translation_matrix(dx, dy, dz, T_rel);
     tool_relative_transform(T_current, T_rel, T_new);
 }
 
-void tool_relative_rotate_rpy(const float T_current[16], float rx, float ry, float rz, float T_new[16]) {
-    // 先绕X，再绕Y，最后绕Z（ZYX顺序，RPY）
+void tool_relative_rotate_rpy(const float T_current[16], float rx, float ry, float rz, float T_new[16])
+{
     float Tx[16], Ty[16], Tz[16], T_tmp[16], T_rel[16];
+
     make_rotation_x(rx, Tx);
     make_rotation_y(ry, Ty);
     make_rotation_z(rz, Tz);
-    // T_rel = Tx * Ty * Tz
+
+    /* T_rel = Tx * Ty * Tz */
     mat_mul44(Tx, Ty, T_tmp);
     mat_mul44(T_tmp, Tz, T_rel);
+
     tool_relative_transform(T_current, T_rel, T_new);
 }

@@ -30,17 +30,25 @@ Build target 'CtrlBoard-H7_WS1812'
 compiling servo_mapping.c...
 ..\User\APP\Gravity_comp.h(7): warning:  #1-D: last line of file ends without a newline
   #endif
-..\User\APP\servo_mapping.c(32): warning:  #177-D: variable "pos_txbuf"  was declared but never referenced
+..\User\APP\servo_mapping.c(34): warning:  #177-D: variable "pos_txbuf"  was declared but never referenced
   static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum 机位置查询帧缓冲�?
-..\User\APP\servo_mapping.c(520): warning:  #177-D: function "JustFloat_send"  was declared but never referenced
+..\User\APP\servo_mapping.c(111): warning:  #550-D: variable "g_have_goal"  was set but never used
+  static uint8_t g_have_goal = 0U;
+..\User\APP\servo_mapping.c(120): warning:  #177-D: function "copy_mat44"  was declared but never referenced
+  static void copy_mat44(const float src[16], float dst[16])
+..\User\APP\servo_mapping.c(153): warning:  #177-D: function "StepTowardAngleLimited"  was declared but never referenced
+  static float StepTowardAngleLimited(float current_cmd, float target_cmd, float max_step)
+..\User\APP\servo_mapping.c(171): warning:  #177-D: function "Update_Position_Mode_From_Key"  was declared but never referenced
+  static void Update_Position_Mode_From_Key(void)
+..\User\APP\servo_mapping.c(662): warning:  #177-D: function "JustFloat_send"  was declared but never referenced
   static void JustFloat_send(moterMapHeader *MoterMap)
-..\User\APP\servo_mapping.c(291): warning:  #177-D: function "map_servo_to_joint"  was declared but never referenced
+..\User\APP\servo_mapping.c(398): warning:  #177-D: function "map_servo_to_joint"  was declared but never referenced
   static void map_servo_to_joint(void)
-..\User\APP\servo_mapping.c: 4 warnings, 0 errors
+..\User\APP\servo_mapping.c: 8 warnings, 0 errors
 linking...
-Program Size: Code=42336 RO-data=2500 RW-data=328 ZI-data=21792  
+Program Size: Code=40044 RO-data=2524 RW-data=280 ZI-data=21704  
 FromELF: creating hex file...
-"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 4 Warning(s).
+"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 8 Warning(s).
 
 <h2>Software Packages used:</h2>
 

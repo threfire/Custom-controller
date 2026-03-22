@@ -95,7 +95,7 @@ void JointImp_DefaultConfig(JointImpConfig_t *cfg)
     cfg->torque_limit = 0.0f;
     cfg->torque_rate_limit = 0.0f;
 
-    cfg->vel_lpf_alpha = 0.90f;
+    cfg->vel_lpf_alpha = 0.80f;
 
     cfg->torque_constant = 0.0f;
     cfg->gear_ratio = 1.0f;
