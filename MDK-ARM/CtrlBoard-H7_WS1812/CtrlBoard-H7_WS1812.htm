@@ -3,7 +3,7 @@
 <title>Static Call Graph - [CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Mon Mar 23 00:14:32 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060528: Last Updated: Wed Mar 25 03:08:02 2026
 <BR><P>
 <H3>Maximum Stack Usage =       1100 bytes + Unknown(Functions without stacksize, Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -939,7 +939,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[16c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Set_Taget_Torque
 </UL>
 
-<P><STRONG><a name="[ce]"></a>CustomController_AngleMapping</STRONG> (Thumb, 246 bytes, Stack size 8 bytes, servo_mapping.o(i.CustomController_AngleMapping))
+<P><STRONG><a name="[ce]"></a>CustomController_AngleMapping</STRONG> (Thumb, 248 bytes, Stack size 8 bytes, servo_mapping.o(i.CustomController_AngleMapping))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = CustomController_AngleMapping
 </UL>
 <BR>[Calls]<UL><LI><a href="#[cf]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;map_zdt_to_joint
@@ -2117,7 +2117,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[a1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Servo_TASK
 </UL>
 
-<P><STRONG><a name="[16c]"></a>Set_Taget_Torque</STRONG> (Thumb, 136 bytes, Stack size 32 bytes, servo_mapping.o(i.Set_Taget_Torque))
+<P><STRONG><a name="[16c]"></a>Set_Taget_Torque</STRONG> (Thumb, 152 bytes, Stack size 32 bytes, servo_mapping.o(i.Set_Taget_Torque))
 <BR><BR>[Stack]<UL><LI>Max Depth = 204<LI>Call Chain = Set_Taget_Torque &rArr; USER_ZDT_X42_V2_Torque_Control &rArr; USER_can_SendCmd &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[172]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;USER_ZDT_X42_V2_Torque_Control
@@ -3014,7 +3014,7 @@ Local Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[16b]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;calc_send_torque
 </UL>
 
-<P><STRONG><a name="[cf]"></a>map_zdt_to_joint</STRONG> (Thumb, 152 bytes, Stack size 0 bytes, servo_mapping.o(i.map_zdt_to_joint))
+<P><STRONG><a name="[cf]"></a>map_zdt_to_joint</STRONG> (Thumb, 200 bytes, Stack size 0 bytes, servo_mapping.o(i.map_zdt_to_joint))
 <BR><BR>[Called By]<UL><LI><a href="#[ce]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;CustomController_AngleMapping
 </UL>
 

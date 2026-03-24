@@ -13,7 +13,7 @@
 // 不同关节的力矩转换系数
 #define TAU_MAP_PARAM1 2000
 #define TAU_MAP_PARAM2 9.0f
-#define TAU_MAP_PARAM3 4600
+#define TAU_MAP_PARAM3 4700
 #define TAU_MAP_PARAM4 6000
 #define TAU_MAP_PARAM5 13600
 #define TAU_MAP_PARAM6 26000
@@ -56,10 +56,10 @@ static JustFloat frame = {
     };
 //关节力矩计算参数常量定义
 static const float g_kp_init[JOINT_NUM] = {
-    -0.1f, 1.0f, -0.2f, -0.15f, -0.15f, -0.15f
+    -0.1f, 0.0f, -0.2f, -0.15f, -0.15f, -0.15f
 };
 static const float g_kd_init[JOINT_NUM] = {
-    -0.002f, 0.01f, -0.08f, -0.008f, -0.01f, -0.006f
+    -0.0015f, 0.000f, -0.08f, -0.01f, -0.008f, -0.008f
 };
 static const float g_torque_limit_init[JOINT_NUM] = {
     0.4f, 0.6f, 0.6f, 0.4f, 0.3f, 0.2f
@@ -294,6 +294,18 @@ static float ScaleValue(float original_value, float old_min, float old_max, floa
     float new_value = new_min + ((original_value - old_min) * (new_max - new_min)) / (old_max - old_min);
     return new_value;
 }
+
+float k;
+static float j4_gain_by_angle(float pos_deg)
+{
+    float x = fabsf(pos_deg);
+    k = 1.0f + 0.0010f * x + 0.00007f * x * x;
+
+    if (k > 1.5f) {
+        k = 1.5f;
+    }
+    return k;
+}
 /* ================= 初始化函数 ================= */
 /**
  * @brief  
@@ -419,7 +431,7 @@ static void map_zdt_to_joint(void)
 	MoterMap.j1 = PI/2 - MotorCurrents[1].position;             // 
 	MoterMap.j2 = - PI + MotorCurrents[2].position * PI / 180.0f;    // 
 	MoterMap.j3 = MotorCurrents[3].position * PI / 180.0f;      // 
-	MoterMap.j4 = 1.2f*MotorCurrents[4].position * PI / 180.0f;      // 
+	MoterMap.j4 = j4_gain_by_angle(MotorCurrents[4].position) * MotorCurrents[4].position * PI / 180.0f;
 	MoterMap.j5 = MotorCurrents[5].position * PI / 180.0f;      // 
 }
 /**
@@ -445,7 +457,7 @@ void CustomController_AngleMapping(void)
 	LIMIT(MoterMap.j1     	, -PI/2	    , PI/2	);
 	LIMIT(MoterMap.j2    	, -11*PI/12	,-PI/4	);
 	LIMIT(MoterMap.j3       ,-PI		,PI	);
-	LIMIT(MoterMap.j4       ,-2*PI/3	,2*PI/3	);
+	LIMIT(MoterMap.j4       ,-3*PI/4	,3*PI/4	);
 	LIMIT(MoterMap.j5       ,-2*PI/3	,2*PI/3	);  
 }
 /* ================= 从电机位置得到DH参数θ角 ================= */
@@ -853,10 +865,15 @@ void Set_Taget_Torque(void)
        位置/速度/Kp/Kd/前馈 分开发给 MIT 控制器 */
     CAN_cmd_MIT(&hfdcan2,
                 0x02,
-                g_mit_pos_cmd,
-                g_mit_vel_cmd,
-                g_mit_kp_cmd,
-                g_mit_kd_cmd,
+//                g_mit_pos_cmd,
+//                g_mit_vel_cmd,
+//                g_mit_kp_cmd,
+//                g_mit_kd_cmd,
+//                g_mit_ff_cmd);
+	                0,
+                0,
+                0,
+                0.00008f,
                 g_mit_ff_cmd);
 
     USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000, send_tau[2], 0);

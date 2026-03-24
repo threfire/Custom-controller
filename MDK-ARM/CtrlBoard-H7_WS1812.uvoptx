@@ -350,6 +350,11 @@
           <WinNumber>1</WinNumber>
           <ItemText>g_mit_ff_cmd,0x0A</ItemText>
         </Ww>
+        <Ww>
+          <count>38</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>k</ItemText>
+        </Ww>
       </WatchWindow1>
       <WatchWindow2>
         <Ww>
