@@ -48,7 +48,7 @@ void MX_UART7_Init(void)
   huart7.Init.StopBits = UART_STOPBITS_1;
   huart7.Init.Parity = UART_PARITY_NONE;
   huart7.Init.Mode = UART_MODE_TX_RX;
-  huart7.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart7.Init.HwFlowCtl = UART_HWCONTROL_RTS_CTS;
   huart7.Init.OverSampling = UART_OVERSAMPLING_16;
   huart7.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart7.Init.ClockPrescaler = UART_PRESCALER_DIV1;
@@ -146,8 +146,10 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     /**UART7 GPIO Configuration
     PE7     ------> UART7_RX
     PE8     ------> UART7_TX
+    PE9     ------> UART7_RTS
+    PE10     ------> UART7_CTS
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
+    GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -288,8 +290,10 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     /**UART7 GPIO Configuration
     PE7     ------> UART7_RX
     PE8     ------> UART7_TX
+    PE9     ------> UART7_RTS
+    PE10     ------> UART7_CTS
     */
-    HAL_GPIO_DeInit(GPIOE, GPIO_PIN_7|GPIO_PIN_8);
+    HAL_GPIO_DeInit(GPIOE, GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10);
 
     /* UART7 DMA DeInit */
     HAL_DMA_DeInit(uartHandle->hdmarx);
