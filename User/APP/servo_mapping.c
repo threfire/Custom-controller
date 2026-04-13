@@ -873,7 +873,7 @@ void Set_Taget_Torque(void)
 	                0,
                 0,
                 0,
-                0.00008f,
+                0.0001f,
                 g_mit_ff_cmd);
 
     USER_ZDT_X42_V2_Torque_Control(&hfdcan2, 3, MotorCurrents[2].dir, 25000, send_tau[2], 0);

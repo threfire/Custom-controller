@@ -113,7 +113,7 @@ int main(void)
   MX_FDCAN2_Init();
   MX_TIM12_Init();
   /* USER CODE BEGIN 2 */
-  	Servo_Mapping_Init();
+//  	Servo_Mapping_Init();
 	bsp_can_init();
 	Beep_Init();
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart7, uart7_rebuffer, sizeof(uart7_rebuffer)*2);

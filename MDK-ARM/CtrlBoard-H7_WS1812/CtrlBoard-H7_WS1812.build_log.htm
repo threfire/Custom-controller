@@ -21,13 +21,34 @@ Target DLL:      CMSIS_AGDI.dll V1.33.18.0
 Dialog DLL:      TCM.DLL V1.56.4.0
  
 <h2>Project:</h2>
-C:\Users\huang\Desktop\RM\工程\自定义控制器\代码\Custom_Controller - v1.2\MDK-ARM\CtrlBoard-H7_WS1812.uvprojx
-Project File Date:  04/01/2026
+C:\Users\huang\Desktop\RM\工程\自定义控制器\2026自定义控制器\代码\Custom_Controller - v1.2\MDK-ARM\CtrlBoard-H7_WS1812.uvprojx
+Project File Date:  04/04/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 5 (build 528)', folder: 'D:\Keil5\ARM\ARMCC\Bin'
 Build target 'CtrlBoard-H7_WS1812'
-"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 0 Warning(s).
+compiling servo_mapping.c...
+..\User\APP\Gravity_comp.h(7): warning:  #1-D: last line of file ends without a newline
+  #endif
+..\User\APP\servo_mapping.c(34): warning:  #177-D: variable "pos_txbuf"  was declared but never referenced
+  static uint8_t pos_txbuf[6];  // 55 55 id 03 28 checksum 鏈轰綅缃煡璇㈠抚缂撳啿鍖?
+..\User\APP\servo_mapping.c(111): warning:  #550-D: variable "g_have_goal"  was set but never used
+  static uint8_t g_have_goal = 0U;
+..\User\APP\servo_mapping.c(120): warning:  #177-D: function "copy_mat44"  was declared but never referenced
+  static void copy_mat44(const float src[16], float dst[16])
+..\User\APP\servo_mapping.c(153): warning:  #177-D: function "StepTowardAngleLimited"  was declared but never referenced
+  static float StepTowardAngleLimited(float current_cmd, float target_cmd, float max_step)
+..\User\APP\servo_mapping.c(171): warning:  #177-D: function "Update_Position_Mode_From_Key"  was declared but never referenced
+  static void Update_Position_Mode_From_Key(void)
+..\User\APP\servo_mapping.c(674): warning:  #177-D: function "JustFloat_send"  was declared but never referenced
+  static void JustFloat_send(moterMapHeader *MoterMap)
+..\User\APP\servo_mapping.c(410): warning:  #177-D: function "map_servo_to_joint"  was declared but never referenced
+  static void map_servo_to_joint(void)
+..\User\APP\servo_mapping.c: 8 warnings, 0 errors
+linking...
+Program Size: Code=39932 RO-data=2524 RW-data=284 ZI-data=21700  
+FromELF: creating hex file...
+"CtrlBoard-H7_WS1812\CtrlBoard-H7_WS1812.axf" - 0 Error(s), 8 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -50,7 +71,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE@6.1.0
       Include file:  CMSIS/Core/Include/tz_context.h
-Build Time Elapsed:  00:00:00
+Build Time Elapsed:  00:00:05
 </pre>
 </body>
 </html>
